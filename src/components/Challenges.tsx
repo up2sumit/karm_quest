@@ -27,6 +27,8 @@ export function Challenges({ stats }: ChallengesProps) {
       ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
       : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
 
+  const totalXp = stats.totalXpEarned ?? stats.xp;
+
   const challenges: Challenge[] = [
     { id: '1', titleKey: 'challengeBrahmaMuhurta', descKey: 'challengeBrahmaDesc', reward: 30, progress: 1, total: 3, emoji: '🌅', type: 'daily' },
     { id: '2', titleKey: 'challengeVidyaSeeker', descKey: 'challengeVidyaDesc', reward: 20, progress: 0, total: 2, emoji: '📖', type: 'daily' },
@@ -34,7 +36,7 @@ export function Challenges({ stats }: ChallengesProps) {
     { id: '4', titleKey: 'challengeKarmaStorm', descKey: 'challengeKarmaStormDesc', reward: 50, progress: stats.questsCompleted % 5, total: 5, emoji: '⚡', type: 'daily' },
     { id: '5', titleKey: 'challengeRavanaSlayer', descKey: 'challengeRavanaDesc', reward: 200, progress: Math.min(stats.questsCompleted, 15), total: 15, emoji: '🔱', type: 'weekly' },
     { id: '6', titleKey: 'challengeScrollMaster', descKey: 'challengeScrollDesc', reward: 150, progress: 6, total: 10, emoji: '📜', type: 'weekly' },
-    { id: '7', titleKey: 'challengeDivyaGrind', descKey: 'challengeDivyaDesc', reward: 300, progress: Math.min(stats.xp, 500), total: 500, emoji: '💎', type: 'weekly' },
+    { id: '7', titleKey: 'challengeDivyaGrind', descKey: 'challengeDivyaDesc', reward: 300, progress: Math.min(totalXp, 500), total: 500, emoji: '💎', type: 'weekly' },
     { id: '8', titleKey: 'challengeAsuraRush', descKey: 'challengeAsuraDesc', reward: 250, progress: 1, total: 3, emoji: '👑', type: 'special' },
   ];
 

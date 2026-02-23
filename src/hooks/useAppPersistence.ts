@@ -1,52 +1,63 @@
-import { useEffect } from "react"
-import { useStore } from "../store"
+import { useEffect, useRef, useState } from 'react';
 
-const STORAGE_KEY = "karmquest-app-state"
-const APP_VERSION = "1.0.0"
+/**
+ * Lightweight persistence helper.
+ *
+ * This project does NOT use Zustand; the app state lives in React useState.
+ * Keep this hook here so you can plug persistence in without changing features.
+ *
+ * Usage example (optional):
+ *   useAppPersistence({
+ *     key: 'karmquest-app-state',
+ *     version: '1.0.0',
+ *     snapshot: { quests, notes, stats, achievements, notifications },
+ *     restore: (s) => { setQuests(s.quests); ... }
+ *   })
+ */
+export function useAppPersistence<T extends object>(opts: {
+  key?: string;
+  version?: string;
+  snapshot: T;
+  restore: (restored: T) => void;
+}) {
+  const STORAGE_KEY = opts.key ?? 'karmquest-app-state';
+  const APP_VERSION = opts.version ?? '1.0.0';
 
-type PersistedState = {
-  version: string
-  state: any
-}
-
-export function useAppPersistence() {
-  const store = useStore()
+  // Prevent "save defaults" from overwriting a user's stored state on first boot.
+  // Also prevents double-restore in React Strict Mode.
+  const [hydrated, setHydrated] = useState(false);
+  const didRestore = useRef(false);
 
   // Restore state on first load
   useEffect(() => {
+    if (didRestore.current) return;
+    didRestore.current = true;
+
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (!raw) return
-
-      const parsed: PersistedState = JSON.parse(raw)
-
-      if (parsed.version !== APP_VERSION) {
-        console.warn("App version changed. Skipping restore.")
-        return
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { version: string; snapshot: T };
+        if (parsed && parsed.version === APP_VERSION && parsed.snapshot) {
+          opts.restore(parsed.snapshot);
+        }
       }
-
-      store.setState(parsed.state)
-    } catch (err) {
-      console.error("Failed to restore state:", err)
-      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    } finally {
+      setHydrated(true);
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Save state on every change
+  // Save state on change
   useEffect(() => {
-    const unsubscribe = useStore.subscribe((state) => {
-      const data: PersistedState = {
-        version: APP_VERSION,
-        state
-      }
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: APP_VERSION, snapshot: opts.snapshot }));
+    } catch {
+      // ignore quota/security errors
+    }
+  }, [hydrated, STORAGE_KEY, APP_VERSION, opts.snapshot]);
 
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-      } catch (err) {
-        console.error("Failed to persist state:", err)
-      }
-    })
-
-    return unsubscribe
-  }, [])
+  return { hydrated };
 }

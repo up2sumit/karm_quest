@@ -28,6 +28,9 @@ export function Achievements({ achievements, stats }: AchievementsProps) {
   const locked = achievements.filter(a => !a.unlocked);
   const nextAchievement = locked[0];
 
+  // Lifetime XP is used for achievements so progress doesn't reset after leveling up.
+  const totalXp = stats.totalXpEarned ?? stats.xp;
+
   const getRarityLabel = (r: keyof typeof rarityConfig) => isHinglish ? rarityConfig[r].labelHi : rarityConfig[r].label;
   const getRarityBg = (r: keyof typeof rarityConfig) => isDark ? rarityConfig[r].darkBg : rarityConfig[r].bg;
 
@@ -48,12 +51,12 @@ export function Achievements({ achievements, stats }: AchievementsProps) {
         </div>
         <div className={`${card} rounded-2xl p-4 text-center`}>
           <span className="text-2xl">🕉️</span>
-          <p className={`text-lg font-bold mt-1.5 ${tp}`}>{stats.xp} {isHinglish ? 'XP' : 'Punya'}</p>
+          <p className={`text-lg font-bold mt-1.5 ${tp}`}>{totalXp} {isHinglish ? 'XP' : 'Punya'}</p>
           <p className={`text-[11px] ${ts}`}>{t('totalExperience', lang)}</p>
         </div>
         <div className={`${card} rounded-2xl p-4 text-center`}>
           <span className="text-2xl">🎯</span>
-          <p className={`text-lg font-bold mt-1.5 ${tp}`}>{nextAchievement ? Math.max(0, nextAchievement.xpRequired - stats.xp) : 0}</p>
+          <p className={`text-lg font-bold mt-1.5 ${tp}`}>{nextAchievement ? Math.max(0, nextAchievement.xpRequired - totalXp) : 0}</p>
           <p className={`text-[11px] ${ts}`}>{t('untilNextSiddhi', lang)}</p>
         </div>
       </div>
@@ -75,9 +78,9 @@ export function Achievements({ achievements, stats }: AchievementsProps) {
                 <p className={`text-[12px] ${ts}`}>{nextAchievement.description}</p>
                 <div className={`mt-2 h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
                   <div className={`h-full rounded-full transition-all duration-500 ${isHinglish ? 'bg-gradient-to-r from-rose-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'}`}
-                    style={{ width: `${Math.min(100, (stats.xp / nextAchievement.xpRequired) * 100)}%` }} />
+                    style={{ width: `${Math.min(100, (totalXp / nextAchievement.xpRequired) * 100)}%` }} />
                 </div>
-                <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{stats.xp}/{nextAchievement.xpRequired} {isHinglish ? 'XP' : 'Punya'}</p>
+                <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{totalXp}/{nextAchievement.xpRequired} {isHinglish ? 'XP' : 'Punya'}</p>
               </div>
             </div>
           </div>

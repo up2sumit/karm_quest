@@ -2,7 +2,7 @@ import { TrendingUp, Target, Zap, Trophy, ArrowRight } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { t, getQuotes } from '../i18n';
 import type { UserStats, Quest, Note, Achievement } from '../store';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 interface DashboardProps {
   stats: UserStats;
@@ -19,6 +19,7 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
   const totalToday = quests.length;
   const progressPercent = totalToday > 0 ? Math.round((completedToday / totalToday) * 100) : 0;
   const unlockedCount = achievements.filter(a => a.unlocked).length;
+  const totalXp = stats.totalXpEarned ?? stats.xp;
   const activeQuests = quests.filter(q => q.status === 'active');
 
   const card = isHinglish
@@ -35,6 +36,20 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
     setQuote(quotes[Math.floor(Math.random() * quotes.length)]);
   }, [lang]);
 
+  // Bug 1 FIX: stable decorative circles — computed once on mount, never on re-render.
+  // useMemo([]) guarantees the random values are generated exactly once, so
+  // re-renders from parent state changes (quest completions, XP popups, etc.)
+  // don't cause the circles to jump to new positions.
+  const bannerCircles = useMemo(() =>
+    [...Array(4)].map((_, i) => ({
+      id:      i,
+      size:    Math.random() * 120 + 40,
+      left:    Math.random() * 100,
+      top:     Math.random() * 100,
+      opacity: Math.random() * 0.5,
+    }))
+  , []); // empty deps: fixed for the component's lifetime
+
   const bannerGradient = isHinglish
     ? 'bg-gradient-to-r from-rose-500/90 via-violet-500/90 to-indigo-500/90'
     : isDark
@@ -46,11 +61,11 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
       {/* Welcome Banner */}
       <div className={`relative overflow-hidden rounded-2xl p-7 text-white shadow-lg ${bannerGradient}`}>
         <div className="absolute inset-0 opacity-[0.07]">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="absolute rounded-full bg-white" style={{
-              width: `${Math.random() * 120 + 40}px`, height: `${Math.random() * 120 + 40}px`,
-              left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%`,
-              opacity: Math.random() * 0.5,
+          {bannerCircles.map(c => (
+            <div key={c.id} className="absolute rounded-full bg-white" style={{
+              width: `${c.size}px`, height: `${c.size}px`,
+              left: `${c.left}%`, top: `${c.top}%`,
+              opacity: c.opacity,
             }} />
           ))}
         </div>
@@ -76,7 +91,7 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { icon: <Target className={isHinglish ? 'text-rose-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'} size={20} />, label: t('todaysKarma', lang), value: `${completedToday}/${totalToday}`, sub: t('questsDone', lang), emoji: '🎯' },
-          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${stats.xp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨' },
+          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${totalXp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨' },
           { icon: <Zap className={isHinglish ? 'text-amber-400' : isDark ? 'text-amber-400' : 'text-amber-500'} size={20} />, label: t('goldMudras', lang), value: `${stats.coins}`, sub: t('keepGrinding', lang), emoji: '🪙' },
           { icon: <Trophy className={isHinglish ? 'text-orange-400' : isDark ? 'text-orange-400' : 'text-orange-500'} size={20} />, label: t('siddhiLabel', lang), value: `${unlockedCount}/${achievements.length}`, sub: t('unlocked', lang), emoji: '🏆' },
         ].map((item, i) => (
@@ -190,14 +205,14 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
                 <div
                   key={i}
                   className={`flex-1 h-2 rounded-full transition-all ${
-                    i < stats.streak % 7
+                    i < (stats.streak % 7 || (stats.streak > 0 ? 7 : 0))
                       ? isHinglish ? 'bg-gradient-to-r from-rose-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
                       : isDark ? 'bg-white/[0.04]' : 'bg-slate-100'
                   }`}
                 />
               ))}
             </div>
-            <p className={`text-[10px] mt-1.5 text-center ${tm}`}>{7 - (stats.streak % 7)} {t('daysUntilBonus', lang)}</p>
+            <p className={`text-[10px] mt-1.5 text-center ${tm}`}>{stats.streak === 0 ? 7 : (stats.streak % 7 === 0 ? 0 : 7 - (stats.streak % 7))} {t('daysUntilBonus', lang)}</p>
           </div>
 
           {/* Weekly Boss */}
