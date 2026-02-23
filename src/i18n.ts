@@ -11,6 +11,7 @@ const translations = {
   navNotes: { en: 'Vidya Scrolls', hi: 'Gyaan Ki Potli 🧠' },
   navAchievements: { en: 'Siddhi Hall', hi: 'Trophy Room 🏆' },
   navChallenges: { en: 'Tapasya', hi: 'Daily Hustle 🔥' },
+  navShop: { en: 'Mudra Shop', hi: 'Dukaan 🛍️' },
   navSettings: { en: 'Settings', hi: 'Setting-Wetting ⚙️' },
 
   // TopNav
@@ -69,7 +70,26 @@ const translations = {
   dueTodayLabel:  { en: 'Due Today',         hi: 'Aaj Karna Hai!' },
   dueSoonLabel:   { en: 'Due Soon',          hi: 'Jaldi Karo!' },
   overdueCount:   { en: 'overdue',           hi: 'late' },
+  recurringLabel: { en: 'Recurring',         hi: 'Roz/Wkly?' },
+  recurrenceNone: { en: 'Not recurring',     hi: 'Normal' },
+  recurrenceDaily:{ en: 'Daily',             hi: 'Roz' },
+  recurrenceWeekly:{ en: 'Weekly',           hi: 'Hafte ka' },
+  badgeLabel:     { en: 'Title Badge',       hi: 'Badge' },
+  checklistLabel: { en: 'Checklist',         hi: 'Checklist' },
+  addSubtaskPlaceholder: { en: 'Add a sub-task...', hi: 'Sub-task daalo...' },
+  completeSubtasksFirst: { en: 'Complete all sub-tasks first', hi: 'Pehle saare sub-tasks complete karo' },
   // ──────────────────────────────────────────────────────────────────────────
+
+  // Shop
+  shopTitle: { en: 'Mudra Shop', hi: 'Mudra Dukaan 🛍️' },
+  shopSub: { en: 'Spend coins on cosmetics and power-ups', hi: 'Coins kharch karo — style + power!' },
+  shopCoins: { en: 'Your coins', hi: 'Tere coins' },
+  shopBuy: { en: 'Buy', hi: 'Kharido' },
+  shopEquip: { en: 'Equip', hi: 'Laga do' },
+  shopEquipped: { en: 'Equipped', hi: 'Lag gaya' },
+  shopOwned: { en: 'Owned', hi: 'Mil gaya' },
+  shopNotEnough: { en: 'Not enough coins', hi: 'Coins kam hai' },
+  shopActiveBoost: { en: 'Active XP Boost', hi: 'XP Boost ON' },
 
   // Notes Vault
   notesTitle: { en: 'Vidya Scrolls', hi: 'Gyaan Ki Potli 📚' },
@@ -144,6 +164,15 @@ const translations = {
       "Apna time aa gaya hai! 🌟",
     ],
   },
+
+  // Focus Timer
+  focusStart: { en: 'Focus 25m', hi: 'Focus 25m' },
+  focusStop: { en: 'Stop', hi: 'Rok do' },
+  focusInProgress: { en: 'In Focus', hi: 'Focus Mode' },
+  focusCompleteTitle: { en: 'Focus Complete! ⏱️', hi: 'Focus Ho Gaya! ⏱️' },
+  focusCompleteMsg: { en: 'Pomodoro finished. +5 bonus XP earned.', hi: 'Pomodoro complete. +5 bonus XP mila.' },
+  focusStartedTitle: { en: 'Focus Started ⏱️', hi: 'Focus Start ⏱️' },
+  focusStartedMsg: { en: '25 minutes on this quest. Stay in flow.', hi: '25 min ka focus. Flow mein raho.' },
 
   // Theme names
   themeLight: { en: 'Saffron Light', hi: 'Light Mode' },

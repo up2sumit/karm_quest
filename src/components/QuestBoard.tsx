@@ -1,9 +1,11 @@
-import { Plus, Check, Clock, Star, Filter, Sparkles, AlertCircle, CalendarDays } from 'lucide-react';
-import { useState } from 'react';
+import { Plus, Check, Clock, Star, Filter, Sparkles, AlertCircle, CalendarDays, List } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
 import type { Quest, Difficulty } from '../store';
 import { difficultyConfig as defaultDiffConfig, parseDueDate, dueDateSortKey, todayISO } from '../store';
+
+import { QuestCalendar } from './QuestCalendar';
 
 interface QuestBoardProps {
   quests: Quest[];
@@ -90,6 +92,8 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
   const { isDark, isHinglish, lang } = useTheme();
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [selectedISO, setSelectedISO] = useState<string>(todayISO());
   const [newTitle, setNewTitle] = useState('');
   const [newDifficulty, setNewDifficulty] = useState<Difficulty>('easy');
   const [newCategory, setNewCategory] = useState('Karma');
@@ -135,6 +139,37 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
     filter === 'completed' ? completedQuests :
     /* all */                [...sortedActiveQuests, ...completedQuests];
 
+  // ── Calendar buckets (by ISO date) ───────────────────────────────────────
+  const questsByISO = useMemo(() => {
+    const map = new Map<string, Quest[]>();
+    for (const q of quests) {
+      const d = parseDueDate(q.dueDate).date;
+      if (!d) continue;
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const arr = map.get(iso);
+      if (arr) arr.push(q);
+      else map.set(iso, [q]);
+    }
+    // Stable ordering within each day
+    for (const [k, arr] of map.entries()) {
+      map.set(
+        k,
+        [...arr].sort((a, b) => {
+          if (a.status !== b.status) return a.status === 'active' ? -1 : 1;
+          return dueDateSortKey(a.dueDate) - dueDateSortKey(b.dueDate);
+        })
+      );
+    }
+    return map;
+  }, [quests]);
+
+  const selectedDayQuests = useMemo(() => {
+    const list = questsByISO.get(selectedISO) ?? [];
+    if (filter === 'active') return list.filter((q) => q.status === 'active');
+    if (filter === 'completed') return list.filter((q) => q.status === 'completed');
+    return list;
+  }, [questsByISO, selectedISO, filter]);
+
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleComplete = (id: string) => {
     setCompletedAnimation(id);
@@ -174,7 +209,7 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
           </h2>
           <p className={`text-[13px] mt-0.5 ${ts}`}>{t('questBoardSub', lang)}</p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Filter toggle */}
           <div className={`flex items-center gap-0.5 p-0.5 rounded-lg border ${
             isDark ? 'bg-white/[0.02] border-white/[0.05]' : 'bg-slate-50 border-slate-200/40'
@@ -194,6 +229,37 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
               </button>
             ))}
           </div>
+
+          {/* View toggle (List / Calendar) */}
+          <div className={`flex items-center gap-0.5 p-0.5 rounded-lg border ${
+            isDark ? 'bg-white/[0.02] border-white/[0.05]' : 'bg-slate-50 border-slate-200/40'
+          }`}>
+            <button
+              onClick={() => setView('list')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all ${
+                view === 'list'
+                  ? isDark ? 'bg-white/[0.06] text-slate-200 shadow-sm' : 'bg-white text-slate-800 shadow-sm'
+                  : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
+              }`}
+              aria-label="List view"
+            >
+              <List size={12} />
+              {isHinglish ? 'List' : (lang === 'hi' ? 'सूची' : 'List')}
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all ${
+                view === 'calendar'
+                  ? isDark ? 'bg-white/[0.06] text-slate-200 shadow-sm' : 'bg-white text-slate-800 shadow-sm'
+                  : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
+              }`}
+              aria-label="Calendar view"
+            >
+              <CalendarDays size={12} />
+              {isHinglish ? 'Calendar' : (lang === 'hi' ? 'कैलेंडर' : 'Calendar')}
+            </button>
+          </div>
+
           {/* New Quest button */}
           <button
             onClick={() => setShowForm(true)}
@@ -342,7 +408,7 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
            "punya earned" which is already visible in the TopNav bar).
            When there are no overdue quests, falls back to punya earned.
       ──────────────────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className={`${card} rounded-2xl p-3.5 text-center`}>
           <p className={`text-lg font-bold ${tp}`}>{activeQuests.length}</p>
           <p className={`text-[11px] ${ts}`}>{t('activeQuests', lang)}</p>
@@ -370,149 +436,238 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
         </div>
       </div>
 
-      {/* ── Quest Cards ───────────────────────────────────────────────────────
-           Each card inspects its dueDate via parseDueDate():
-           - Overdue: red left-border override + subtle red background tint
-           - Due today: amber left-border subtle accent
-           - All other behaviour (difficulty border, completion opacity) unchanged
-      ──────────────────────────────────────────────────────────────────────── */}
-      <div className="space-y-2.5">
-        {filteredQuests.map((quest, index) => {
-          const config = defaultDiffConfig[quest.difficulty];
-          const isCompleting = completedAnimation === quest.id;
-          const { isOverdue, isDueToday } = parseDueDate(quest.dueDate);
-          const showOverdue = isOverdue && quest.status === 'active';
-          const showDueToday = isDueToday && quest.status === 'active';
+      {view === 'calendar' ? (
+        <div className="space-y-3">
+          <div className={`${card} rounded-2xl p-4`}>
+            <QuestCalendar quests={quests} selectedISO={selectedISO} onSelectISO={setSelectedISO} />
+          </div>
 
-          return (
-            <div
-              key={quest.id}
-              className={[
-                card,
-                'rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md',
-                // Difficulty left-border (from index.css) — overridden by overdue class if needed
-                showOverdue
-                  ? 'quest-card-overdue'           // red left-border, red bg tint
-                  : `quest-card-${quest.difficulty}`,
-                quest.status === 'completed' ? 'opacity-50' : '',
-                isCompleting ? 'animate-shake scale-[0.98]' : '',
-              ].filter(Boolean).join(' ')}
-              style={{ animationDelay: `${index * 40}ms` }}
-            >
-              <div className="flex items-center gap-3.5">
-                {/* Completion button */}
-                <button
-                  onClick={() => quest.status === 'active' && handleComplete(quest.id)}
-                  disabled={quest.status === 'completed'}
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all ${
-                    quest.status === 'completed'
-                      ? 'bg-emerald-500/20 text-emerald-500'
-                      : showOverdue
-                        ? isDark
-                          ? 'bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 hover:scale-105'
-                          : 'bg-red-50 border border-red-200/60 hover:bg-red-100 hover:scale-105'
-                        : isDark
-                          ? 'bg-white/[0.04] border border-white/[0.08] hover:border-indigo-400/40 hover:bg-indigo-500/10 hover:scale-105'
-                          : 'bg-slate-50 border border-slate-200/60 hover:border-indigo-300 hover:bg-indigo-50 hover:scale-105'
-                  }`}
-                >
-                  {quest.status === 'completed'
-                    ? <Check size={16} />
-                    : <span className={`text-[10px] ${
-                        showOverdue
-                          ? 'text-red-400'
-                          : isDark ? 'text-slate-600' : 'text-slate-300'
-                      }`}>✓</span>
-                  }
-                </button>
+          <div className={`${card} rounded-2xl p-4`}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <p className={`text-[12px] font-bold ${tp}`}>
+                  {(isHinglish ? 'Due on' : lang === 'hi' ? 'इस दिन देय' : 'Due on')}
+                  <span className={`ml-2 font-black ${isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{selectedISO}</span>
+                </p>
+                <p className={`text-[11px] mt-0.5 ${ts}`}>{selectedDayQuests.length} quest{selectedDayQuests.length !== 1 ? 's' : ''}</p>
+              </div>
+              <button
+                onClick={() => setSelectedISO(todayISO())}
+                className={`px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
+                  isHinglish
+                    ? 'bg-rose-50/70 border border-rose-200/40 text-rose-600 hover:bg-rose-100/70'
+                    : isDark
+                      ? 'bg-white/[0.03] border border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'
+                      : 'bg-slate-50 border border-slate-200/50 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                {isHinglish ? 'Today' : (lang === 'hi' ? 'आज' : 'Today')}
+              </button>
+            </div>
 
-                {/* Quest info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className={`font-medium text-[13px] ${
-                      quest.status === 'completed'
-                        ? 'line-through text-slate-400'
-                        : showOverdue
-                          ? isDark ? 'text-red-300' : 'text-red-700'
-                          : tp
-                    }`}>
-                      {quest.title}
-                    </h4>
-                    {quest.difficulty === 'legendary' && <span className="text-xs">👑</span>}
-                    {/* Overdue badge */}
-                    {showOverdue && (
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${
-                        isDark
-                          ? 'bg-red-500/15 text-red-400'
-                          : 'bg-red-100 text-red-600'
-                      }`}>
-                        {t('overdueLabel', lang)}
-                      </span>
-                    )}
-                    {/* Due Today badge */}
-                    {showDueToday && !showOverdue && (
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${
-                        isHinglish
-                          ? 'bg-rose-100 text-rose-600'
-                          : isDark
-                            ? 'bg-amber-500/15 text-amber-400'
-                            : 'bg-amber-50 text-amber-600'
-                      }`}>
-                        {t('dueTodayLabel', lang)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2.5 mt-1 flex-wrap">
-                    {/* Difficulty pill */}
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isDark ? config.darkBg : config.bg} ${config.color}`}>
-                      {diffLabels[quest.difficulty]}
-                    </span>
-
-                    {/* Due date — uses the new DueDateBadge component */}
-                    <DueDateBadge
-                      dueDate={quest.dueDate}
-                      isDark={isDark}
-                      isHinglish={isHinglish}
-                      lang={lang}
-                      isCompleted={quest.status === 'completed'}
-                    />
-
-                    {/* Category */}
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                      isDark ? 'bg-white/[0.03] text-slate-500' : 'bg-slate-50 text-slate-500'
-                    }`}>
-                      {quest.category}
-                    </span>
-                  </div>
+            <div className="mt-4 space-y-2">
+              {selectedDayQuests.length === 0 ? (
+                <div className={`py-10 text-center ${ts}`}>
+                  <div className="text-4xl opacity-25 mb-2">🗓️</div>
+                  <p className={`text-[13px] font-semibold ${tp}`}>{isHinglish ? 'No quests due' : (lang === 'hi' ? 'कोई क्वेस्ट नहीं' : 'No quests due')}</p>
+                  <p className="text-[11px] mt-1">{isHinglish ? 'Peaceful day 😌' : (lang === 'hi' ? 'Aaram se 😄' : 'Enjoy the calm!')}</p>
                 </div>
+              ) : (
+                selectedDayQuests.map((q) => {
+                  const cfg = defaultDiffConfig[q.difficulty];
+                  const done = q.status === 'completed';
+                  return (
+                    <div
+                      key={q.id}
+                      className={`p-3 rounded-2xl border flex items-start justify-between gap-3 transition-all ${
+                        done
+                          ? isDark ? 'bg-white/[0.02] border-white/[0.04]' : 'bg-slate-50/60 border-slate-200/40'
+                          : isDark ? 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]' : 'bg-white border-slate-200/50 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className={`text-[13px] font-semibold truncate ${
+                          done
+                            ? isDark ? 'text-slate-500 line-through' : 'text-slate-400 line-through'
+                            : tp
+                        }`}>{q.title}</p>
+                        <div className="mt-1 flex items-center gap-2 flex-wrap">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            isDark ? 'bg-white/[0.03] border border-white/[0.05] text-slate-400' : 'bg-slate-100 text-slate-600'
+                          }`}>{q.category}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+                          <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>+{q.xpReward} XP</span>
+                        </div>
+                      </div>
 
-                {/* XP badge */}
-                <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg shrink-0 ${
-                  isDark ? 'bg-white/[0.03]' : 'bg-slate-50'
-                }`}>
-                  <Star size={13} className={
-                    isHinglish ? 'text-rose-400 fill-rose-300' :
-                    isDark ? 'text-indigo-400 fill-indigo-400' :
-                    'text-indigo-500 fill-indigo-400'
-                  } />
-                  <span className={`text-[13px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                    +{quest.xpReward}
-                  </span>
+                      <div className="shrink-0">
+                        {done ? (
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                            isDark ? 'bg-white/[0.03] text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+                          }`}>
+                            <Check size={18} />
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleComplete(q.id)}
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-[1.03] ${
+                              isHinglish
+                                ? 'bg-gradient-to-r from-rose-500 to-violet-500 text-white'
+                                : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
+                            }`}
+                            aria-label="Complete quest"
+                          >
+                            <Check size={18} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ── Quest Cards (List View) ────────────────────────────────────── */
+        <div className="space-y-2.5">
+          {filteredQuests.map((quest, index) => {
+            const config = defaultDiffConfig[quest.difficulty];
+            const isCompleting = completedAnimation === quest.id;
+            const { isOverdue, isDueToday } = parseDueDate(quest.dueDate);
+            const showOverdue = isOverdue && quest.status === 'active';
+            const showDueToday = isDueToday && quest.status === 'active';
+
+            return (
+              <div
+                key={quest.id}
+                className={[
+                  card,
+                  'rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md',
+                  // Difficulty left-border (from index.css) — overridden by overdue class if needed
+                  showOverdue
+                    ? 'quest-card-overdue'           // red left-border, red bg tint
+                    : `quest-card-${quest.difficulty}`,
+                  quest.status === 'completed' ? 'opacity-50' : '',
+                  isCompleting ? 'animate-shake scale-[0.98]' : '',
+                ].filter(Boolean).join(' ')}
+                style={{ animationDelay: `${index * 40}ms` }}
+              >
+                <div className="flex flex-wrap items-center gap-3.5">
+                  {/* Completion button */}
+                  <button
+                    onClick={() => quest.status === 'active' && handleComplete(quest.id)}
+                    disabled={quest.status === 'completed'}
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                      quest.status === 'completed'
+                        ? 'bg-emerald-500/20 text-emerald-500'
+                        : showOverdue
+                          ? isDark
+                            ? 'bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 hover:scale-105'
+                            : 'bg-red-50 border border-red-200/60 hover:bg-red-100 hover:scale-105'
+                          : isDark
+                            ? 'bg-white/[0.04] border border-white/[0.08] hover:border-indigo-400/40 hover:bg-indigo-500/10 hover:scale-105'
+                            : 'bg-slate-50 border border-slate-200/60 hover:border-indigo-300 hover:bg-indigo-50 hover:scale-105'
+                    }`}
+                  >
+                    {quest.status === 'completed'
+                      ? <Check size={16} />
+                      : <span className={`text-[10px] ${
+                          showOverdue
+                            ? 'text-red-400'
+                            : isDark ? 'text-slate-600' : 'text-slate-300'
+                        }`}>✓</span>
+                    }
+                  </button>
+
+                  {/* Quest info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className={`font-medium text-[13px] ${
+                        quest.status === 'completed'
+                          ? 'line-through text-slate-400'
+                          : showOverdue
+                            ? isDark ? 'text-red-300' : 'text-red-700'
+                            : tp
+                      }`}>
+                        {quest.title}
+                      </h4>
+                      {quest.difficulty === 'legendary' && <span className="text-xs">👑</span>}
+                      {/* Overdue badge */}
+                      {showOverdue && (
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${
+                          isDark
+                            ? 'bg-red-500/15 text-red-400'
+                            : 'bg-red-100 text-red-600'
+                        }`}>
+                          {t('overdueLabel', lang)}
+                        </span>
+                      )}
+                      {/* Due Today badge */}
+                      {showDueToday && !showOverdue && (
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${
+                          isHinglish
+                            ? 'bg-rose-100 text-rose-600'
+                            : isDark
+                              ? 'bg-amber-500/15 text-amber-400'
+                              : 'bg-amber-50 text-amber-600'
+                        }`}>
+                          {t('dueTodayLabel', lang)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5 mt-1 flex-wrap">
+                      {/* Difficulty pill */}
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isDark ? config.darkBg : config.bg} ${config.color}`}>
+                        {diffLabels[quest.difficulty]}
+                      </span>
+
+                      {/* Due date — uses the DueDateBadge component */}
+                      <DueDateBadge
+                        dueDate={quest.dueDate}
+                        isDark={isDark}
+                        isHinglish={isHinglish}
+                        lang={lang}
+                        isCompleted={quest.status === 'completed'}
+                      />
+
+                      {/* Category */}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        isDark ? 'bg-white/[0.03] text-slate-500' : 'bg-slate-50 text-slate-500'
+                      }`}>
+                        {quest.category}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* XP badge */}
+                  <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg shrink-0 ${
+                    isDark ? 'bg-white/[0.03]' : 'bg-slate-50'
+                  }`}>
+                    <Star size={13} className={
+                      isHinglish ? 'text-rose-400 fill-rose-300' :
+                      isDark ? 'text-indigo-400 fill-indigo-400' :
+                      'text-indigo-500 fill-indigo-400'
+                    } />
+                    <span className={`text-[13px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                      +{quest.xpReward}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-        {filteredQuests.length === 0 && (
-          <div className="text-center py-14">
-            <span className="text-5xl opacity-60">{isHinglish ? '😴' : '🏰'}</span>
-            <p className={`font-medium mt-3 ${tp}`}>{t('noQuests', lang)}</p>
-            <p className={`text-[13px] mt-1 ${ts}`}>{t('noQuestsSub', lang)}</p>
-          </div>
-        )}
-      </div>
+          {filteredQuests.length === 0 && (
+            <div className="text-center py-14">
+              <span className="text-5xl opacity-60">{isHinglish ? '😴' : '🏰'}</span>
+              <p className={`font-medium mt-3 ${tp}`}>{t('noQuests', lang)}</p>
+              <p className={`text-[13px] mt-1 ${ts}`}>{t('noQuestsSub', lang)}</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

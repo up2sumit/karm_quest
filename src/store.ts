@@ -1,6 +1,23 @@
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'legendary';
 export type QuestStatus = 'active' | 'completed';
-export type Page = 'dashboard' | 'quests' | 'notes' | 'achievements' | 'challenges';
+export type Recurrence = 'none' | 'daily' | 'weekly';
+export type Page = 'dashboard' | 'quests' | 'notes' | 'achievements' | 'challenges' | 'shop';
+
+export interface FocusSession {
+  questId: string;
+  startedAt: number;
+  endsAt: number;
+  durationMs: number;
+  bonusXp: number;
+  /** Guard against awarding twice on refresh. */
+  awarded: boolean;
+}
+
+export interface SubTask {
+  id: string;
+  text: string;
+  done: boolean;
+}
 
 export interface Quest {
   id: string;
@@ -10,6 +27,15 @@ export interface Quest {
   dueDate: string;
   status: QuestStatus;
   category: string;
+
+  // New features
+  recurring: Recurrence;
+  /** YYYY-MM-DD of completion (used for recurring resets). Empty when not completed. */
+  completedAt: string;
+  /** Optional list of checklist items. */
+  subtasks: SubTask[];
+  /** Optional special title badge (from Mudra Shop). */
+  badge: string; // TitleBadgeId, kept as string for backward-compat
 }
 
 export interface Note {
@@ -58,14 +84,19 @@ export const difficultyConfig: Record<Difficulty, { label: string; color: string
 };
 
 export const defaultQuests: Quest[] = [
-  { id: '1', title: 'Complete the project proposal', difficulty: 'hard', xpReward: 50, dueDate: 'Today', status: 'active', category: 'Karma' },
-  { id: '2', title: 'Read 20 pages of Bhagavad Gita', difficulty: 'easy', xpReward: 10, dueDate: 'Today', status: 'active', category: 'Vidya' },
-  { id: '3', title: 'Morning Surya Namaskar – 12 rounds', difficulty: 'medium', xpReward: 25, dueDate: 'Today', status: 'active', category: 'Yoga' },
-  { id: '4', title: 'Design the landing page mockup', difficulty: 'hard', xpReward: 50, dueDate: 'Tomorrow', status: 'active', category: 'Karma' },
-  { id: '5', title: 'Dhyana meditation – 10 minutes', difficulty: 'easy', xpReward: 10, dueDate: 'Today', status: 'active', category: 'Sadhana' },
-  { id: '6', title: 'Defeat the Asura of Procrastination', difficulty: 'legendary', xpReward: 100, dueDate: 'This Week', status: 'active', category: 'Boss Quest' },
-  { id: '7', title: 'Organize workspace – Vastu style', difficulty: 'easy', xpReward: 10, dueDate: 'Today', status: 'completed', category: 'Griha' },
-  { id: '8', title: 'Write blog post on Yoga benefits', difficulty: 'medium', xpReward: 25, dueDate: 'Yesterday', status: 'completed', category: 'Creative' },
+  { id: '1', title: 'Complete the project proposal', difficulty: 'hard', xpReward: 50, dueDate: 'Today', status: 'active', category: 'Karma', recurring: 'none', completedAt: '', subtasks: [], badge: 'none' },
+  { id: '2', title: 'Read 20 pages of Bhagavad Gita', difficulty: 'easy', xpReward: 10, dueDate: 'Today', status: 'active', category: 'Vidya', recurring: 'none', completedAt: '', subtasks: [], badge: 'none' },
+  // Perfect recurring habit example + checklist
+  { id: '3', title: 'Morning Surya Namaskar – 12 rounds', difficulty: 'medium', xpReward: 25, dueDate: 'Today', status: 'active', category: 'Yoga', recurring: 'daily', completedAt: '', subtasks: [
+      { id: '3-1', text: 'Warm-up (2 min)', done: false },
+      { id: '3-2', text: '12 rounds', done: false },
+      { id: '3-3', text: 'Cool down + water', done: false },
+    ], badge: 'none' },
+  { id: '4', title: 'Design the landing page mockup', difficulty: 'hard', xpReward: 50, dueDate: 'Tomorrow', status: 'active', category: 'Karma', recurring: 'none', completedAt: '', subtasks: [], badge: 'none' },
+  { id: '5', title: 'Dhyana meditation – 10 minutes', difficulty: 'easy', xpReward: 10, dueDate: 'Today', status: 'active', category: 'Sadhana', recurring: 'daily', completedAt: '', subtasks: [], badge: 'none' },
+  { id: '6', title: 'Defeat the Asura of Procrastination', difficulty: 'legendary', xpReward: 100, dueDate: 'This Week', status: 'active', category: 'Boss Quest', recurring: 'weekly', completedAt: '', subtasks: [], badge: 'none' },
+  { id: '7', title: 'Organize workspace – Vastu style', difficulty: 'easy', xpReward: 10, dueDate: 'Today', status: 'completed', category: 'Griha', recurring: 'none', completedAt: todayISO(), subtasks: [], badge: 'none' },
+  { id: '8', title: 'Write blog post on Yoga benefits', difficulty: 'medium', xpReward: 25, dueDate: 'Yesterday', status: 'completed', category: 'Creative', recurring: 'none', completedAt: yesterdayISO(), subtasks: [], badge: 'none' },
 ];
 
 export const defaultNotes: Note[] = [
@@ -131,7 +162,7 @@ function toLocalMidnight(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function addDaysISO(baseISO: string, days: number): string {
+export function addDaysISO(baseISO: string, days: number): string {
   const [y, m, dd] = baseISO.split('-').map(Number);
   const base = new Date(y, (m - 1), dd);
   const next = new Date(base.getTime() + days * 86_400_000);

@@ -6,13 +6,8 @@ import { useEffect, useRef, useState } from 'react';
  * This project does NOT use Zustand; the app state lives in React useState.
  * Keep this hook here so you can plug persistence in without changing features.
  *
- * Usage example (optional):
- *   useAppPersistence({
- *     key: 'karmquest-app-state',
- *     version: '1.0.0',
- *     snapshot: { quests, notes, stats, achievements, notifications },
- *     restore: (s) => { setQuests(s.quests); ... }
- *   })
+ * ✅ Updated: restores again if `key` (or `version`) changes.
+ * This is required for multi-user apps where storage keys are per-user.
  */
 export function useAppPersistence<T extends object>(opts: {
   key?: string;
@@ -26,12 +21,15 @@ export function useAppPersistence<T extends object>(opts: {
   // Prevent "save defaults" from overwriting a user's stored state on first boot.
   // Also prevents double-restore in React Strict Mode.
   const [hydrated, setHydrated] = useState(false);
-  const didRestore = useRef(false);
+  const restoredMarkerRef = useRef<string | null>(null);
 
-  // Restore state on first load
+  // Restore state when key/version changes
   useEffect(() => {
-    if (didRestore.current) return;
-    didRestore.current = true;
+    const marker = `${STORAGE_KEY}::${APP_VERSION}`;
+    if (restoredMarkerRef.current === marker) return;
+    restoredMarkerRef.current = marker;
+
+    setHydrated(false);
 
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -47,7 +45,7 @@ export function useAppPersistence<T extends object>(opts: {
       setHydrated(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [STORAGE_KEY, APP_VERSION]);
 
   // Save state on change
   useEffect(() => {

@@ -3,6 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import { t, getQuotes } from '../i18n';
 import type { UserStats, Quest, Note, Achievement } from '../store';
 import { useState, useEffect, useMemo } from 'react';
+import { MoodCheckIn } from './MoodCheckIn';
 
 interface DashboardProps {
   stats: UserStats;
@@ -19,7 +20,6 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
   const totalToday = quests.length;
   const progressPercent = totalToday > 0 ? Math.round((completedToday / totalToday) * 100) : 0;
   const unlockedCount = achievements.filter(a => a.unlocked).length;
-  const totalXp = stats.totalXpEarned ?? stats.xp;
   const activeQuests = quests.filter(q => q.status === 'active');
 
   const card = isHinglish
@@ -91,7 +91,7 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { icon: <Target className={isHinglish ? 'text-rose-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'} size={20} />, label: t('todaysKarma', lang), value: `${completedToday}/${totalToday}`, sub: t('questsDone', lang), emoji: '🎯' },
-          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${totalXp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨' },
+          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${stats.totalXp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨' },
           { icon: <Zap className={isHinglish ? 'text-amber-400' : isDark ? 'text-amber-400' : 'text-amber-500'} size={20} />, label: t('goldMudras', lang), value: `${stats.coins}`, sub: t('keepGrinding', lang), emoji: '🪙' },
           { icon: <Trophy className={isHinglish ? 'text-orange-400' : isDark ? 'text-orange-400' : 'text-orange-500'} size={20} />, label: t('siddhiLabel', lang), value: `${unlockedCount}/${achievements.length}`, sub: t('unlocked', lang), emoji: '🏆' },
         ].map((item, i) => (
@@ -185,6 +185,7 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
 
         {/* Streak + Boss */}
         <div className="lg:col-span-1 space-y-4">
+          <MoodCheckIn completedToday={completedToday} />
           <div className={`${card} rounded-2xl p-5`}>
             <h3 className={`text-sm font-semibold ${tp} mb-2.5 flex items-center gap-2`}>
               <span className="text-base">{isHinglish ? '🔥' : '🪔'}</span> {t('tapasyaStreak', lang)}

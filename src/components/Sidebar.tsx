@@ -2,6 +2,7 @@ import { Settings, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
 import type { Page } from '../store';
+import { sidebarSkinClasses, type SidebarSkinId } from '../shop';
 
 interface SidebarProps {
   currentPage: Page;
@@ -19,6 +20,9 @@ interface SidebarProps {
   desktopExpanded: boolean;
   /** Whether desktop sidebar can expand beyond the rail (lg+). */
   desktopCanExpand: boolean;
+
+  /** Equipped sidebar skin from Mudra Shop. */
+  sidebarSkin: SidebarSkinId;
 }
 
 const navItems = [
@@ -27,9 +31,10 @@ const navItems = [
   { page: 'notes'        as Page, labelKey: 'navNotes'        as const, emoji: '📜', hi: '🧠' },
   { page: 'achievements' as Page, labelKey: 'navAchievements' as const, emoji: '🏆', hi: '🏆' },
   { page: 'challenges'   as Page, labelKey: 'navChallenges'   as const, emoji: '🔱', hi: '🔥' },
+  { page: 'shop'         as Page, labelKey: 'navShop'         as const, emoji: '🛍️', hi: '🛍️' },
 ];
 
-function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMobileClose, allowToggle }: {
+function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMobileClose, allowToggle, sidebarSkin }: {
   currentPage: Page;
   onNavigate: (p: Page) => void;
   showExpanded: boolean;
@@ -37,21 +42,19 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
   isMobile: boolean;
   onMobileClose?: () => void;
   allowToggle?: boolean;
+  sidebarSkin: SidebarSkinId;
 }) {
-  const { isDark, isHinglish, lang } = useTheme();
-  const bg = isHinglish
-    ? 'bg-gradient-to-b from-[#2A1B3D] via-[#1F1530] to-[#1A1028]'
-    : isDark ? 'bg-gradient-to-b from-[#0C0C1A] via-[#101022] to-[#0C0C1A]'
-             : 'bg-gradient-to-b from-[#1A1A2E] via-[#22223A] to-[#1A1A2E]';
-  const accent = isHinglish ? 'bg-rose-400' : 'bg-indigo-400';
+  const { isHinglish, lang, theme } = useTheme();
+  const skin = sidebarSkinClasses(sidebarSkin, theme);
+  const settingsActive = currentPage === ('profile' as Page);
 
   return (
-    <div className={`flex flex-col h-full m-2.5 mr-0 rounded-2xl border border-white/[0.06] shadow-2xl overflow-hidden ${bg}`}>
+    <div className={`flex flex-col h-full m-2.5 mr-0 rounded-2xl border border-white/[0.06] shadow-2xl overflow-hidden ${skin.bg}`}>
       {/* Logo */}
       <div className={`flex items-center gap-3 px-5 py-5 border-b border-white/[0.06] ${!showExpanded ? 'justify-center' : ''}`}>
         <div className="relative shrink-0">
           <span className="text-2xl">{isHinglish ? '🎉' : '🪔'}</span>
-          <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-indigo-400 animate-subtle-pulse" />
+          <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${isHinglish ? 'bg-rose-400' : skin.accent} animate-subtle-pulse`} />
         </div>
         {showExpanded && (
           <div className="flex-1 min-w-0">
@@ -76,10 +79,10 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative
                 ${active ? 'bg-white/[0.08] text-white shadow-sm' : 'text-white/40 hover:bg-white/[0.04] hover:text-white/70'}
                 ${!showExpanded ? 'justify-center' : ''}`}>
-              {active && <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full ${accent}`} />}
+              {active && <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full ${skin.accent}`} />}
               <span className="text-base shrink-0">{isHinglish ? item.hi : item.emoji}</span>
               {showExpanded && <span className="font-medium text-[13px] truncate">{t(item.labelKey, lang)}</span>}
-              {active && showExpanded && <div className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${accent}`} />}
+              {active && showExpanded && <div className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${skin.accent}`} />}
             </button>
           );
         })}
@@ -87,7 +90,14 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
 
       {/* Footer */}
       <div className="px-2.5 pb-3 pt-3 space-y-1 border-t border-white/[0.06]">
-        <button className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-white/30 hover:bg-white/[0.04] hover:text-white/50 ${!showExpanded ? 'justify-center' : ''}`}>
+        <button
+          onClick={() => onNavigate('profile' as Page)}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+            settingsActive
+              ? 'bg-white/[0.08] text-white shadow-sm'
+              : 'text-white/30 hover:bg-white/[0.04] hover:text-white/50'
+          } ${!showExpanded ? 'justify-center' : ''}`}
+        >
           <Settings size={18} />
           {showExpanded && <span className="font-medium text-[13px]">{t('navSettings', lang)}</span>}
         </button>
@@ -128,7 +138,7 @@ function BottomNav({ currentPage, onNavigate }: { currentPage: Page; onNavigate:
   );
 }
 
-export function Sidebar({ currentPage, onNavigate, collapsed, onToggle, mobileOpen, onMobileClose, isDesktop, desktopWidthPx, desktopExpanded, desktopCanExpand }: SidebarProps) {
+export function Sidebar({ currentPage, onNavigate, collapsed, onToggle, mobileOpen, onMobileClose, isDesktop, desktopWidthPx, desktopExpanded, desktopCanExpand, sidebarSkin }: SidebarProps) {
   const desktopShowExpanded = desktopExpanded && !collapsed; // when false, we show icon-only rail
 
   return (
@@ -146,6 +156,7 @@ export function Sidebar({ currentPage, onNavigate, collapsed, onToggle, mobileOp
             onToggle={onToggle}
             isMobile={false}
             allowToggle={desktopCanExpand}
+            sidebarSkin={sidebarSkin}
           />
         </aside>
       )}
@@ -166,6 +177,7 @@ export function Sidebar({ currentPage, onNavigate, collapsed, onToggle, mobileOp
               isMobile={true}
               onMobileClose={onMobileClose}
               allowToggle={false}
+              sidebarSkin={sidebarSkin}
             />
           </aside>
 

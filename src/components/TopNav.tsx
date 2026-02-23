@@ -1,13 +1,21 @@
-import { Bell, Search, Sparkles, Sun, Moon, Palette, ChevronDown, Menu, Check, Trash2, X } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { Bell, Search, Sparkles, Sun, Moon, Palette, ChevronDown, Menu, Check, Trash2, X, FileText, Swords } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme, type ThemeMode } from '../context/ThemeContext';
 import { t } from '../i18n';
-import type { UserStats } from '../store';
+import type { Note, Page, Quest, UserStats, FocusSession } from '../store';
+import { avatarFrameClass, boostRemainingMs, formatMs, isBoostActive, type AvatarFrameId, type XpBoost } from '../shop';
 import type { AppNotification, NotificationType } from '../notifications';
 import { formatRelativeTime } from '../notifications';
 
 interface TopNavProps {
   stats: UserStats;
+  avatarFrame: AvatarFrameId;
+  xpBoost: XpBoost | null;
+  // Focus Timer (Pomodoro)
+  focusSession: FocusSession | null;
+  focusRemainingMs: number;
+  onStopFocus: () => void;
+
   /** Left offset in px to account for the desktop sidebar (0 on mobile). */
   sidebarOffsetPx: number;
   onMobileMenuOpen: () => void;
@@ -15,6 +23,15 @@ interface TopNavProps {
   onMarkRead: (id: string) => void;
   onMarkAllRead: () => void;
   onClearAll: () => void;
+
+  /** Global search (Bug #3 fix: search is now functional). */
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  quests: Quest[];
+  notes: Note[];
+  onNavigate: (page: Page) => void;
+  onFocusQuest: (id: string) => void;
+  onFocusNote: (id: string) => void;
 }
 
 const themeOptions: { mode: ThemeMode; icon: string; labelKey: 'themeLight' | 'themeDark' | 'themeHinglish'; desc: string; color: string }[] = [
@@ -29,6 +46,7 @@ const typeAccent: Record<NotificationType, { dot: string; unreadBg: string; unre
   streak:          { dot: 'bg-orange-500',  unreadBg: 'bg-orange-50',   unreadBgDark: 'bg-orange-500/10'  },
   daily_challenge: { dot: 'bg-indigo-500',  unreadBg: 'bg-indigo-50',   unreadBgDark: 'bg-indigo-500/10'  },
   level_up:        { dot: 'bg-violet-500',  unreadBg: 'bg-violet-50',   unreadBgDark: 'bg-violet-500/10'  },
+  focus:          { dot: 'bg-cyan-500',    unreadBg: 'bg-cyan-50',     unreadBgDark: 'bg-cyan-500/10'    },
 };
 
 function NotifRow({ n, isDark, onMarkRead }: {
@@ -132,24 +150,244 @@ function NotificationPanel({ notifications, isDark, isHinglish, onMarkRead, onMa
   );
 }
 
-export function TopNav({ stats, sidebarOffsetPx, onMobileMenuOpen, notifications, onMarkRead, onMarkAllRead, onClearAll }: TopNavProps) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Global Search (Bug #3 Fix)
+// - Controlled input + real filtering
+// - Dropdown results
+// - Click to navigate + focus the matched item
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SearchResult =
+  | { kind: 'quest'; id: string; title: string; meta: string; emoji: string }
+  | { kind: 'note'; id: string; title: string; meta: string; emoji: string };
+
+function scoreMatch(q: string, text: string) {
+  const t = (text || '').toLowerCase();
+  const query = q.toLowerCase();
+  if (!t) return 0;
+  if (t === query) return 100;
+  if (t.startsWith(query)) return 60;
+  const idx = t.indexOf(query);
+  if (idx >= 0) return 20 - Math.min(idx, 15);
+  return 0;
+}
+
+function buildSearchResults(q: string, quests: Quest[], notes: Note[], isHinglish: boolean): SearchResult[] {
+  const query = q.trim();
+  if (!query) return [];
+
+  const questMatches = quests
+    .map((quest) => {
+      const s = Math.max(
+        scoreMatch(query, quest.title),
+        scoreMatch(query, quest.category),
+        scoreMatch(query, quest.difficulty),
+      );
+      return { quest, s };
+    })
+    .filter(x => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 6)
+    .map(({ quest }) => ({
+      kind: 'quest' as const,
+      id: quest.id,
+      title: quest.title,
+      meta: `${quest.status === 'completed' ? (isHinglish ? 'Complete' : 'Completed') : (isHinglish ? 'Active' : 'Active')} · +${quest.xpReward} XP`,
+      emoji: isHinglish ? '🏹' : '⚔️',
+    }));
+
+  const noteMatches = notes
+    .map((note) => {
+      const tagScores = note.tags?.map(tag => scoreMatch(query, tag)) ?? [];
+      const s = Math.max(
+        scoreMatch(query, note.title),
+        scoreMatch(query, note.content),
+        ...tagScores,
+      );
+      return { note, s };
+    })
+    .filter(x => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 6)
+    .map(({ note }) => ({
+      kind: 'note' as const,
+      id: note.id,
+      title: note.title,
+      meta: `${isHinglish ? 'Scroll' : 'Note'} · ${note.createdAt}`,
+      emoji: note.emoji || (isHinglish ? '📜' : '📝'),
+    }));
+
+  // Interleave a few of each type so the dropdown looks balanced.
+  const out: SearchResult[] = [];
+  const max = 8;
+  let i = 0;
+  while (out.length < max && (i < questMatches.length || i < noteMatches.length)) {
+    if (i < questMatches.length) out.push(questMatches[i]);
+    if (out.length >= max) break;
+    if (i < noteMatches.length) out.push(noteMatches[i]);
+    i++;
+  }
+  return out;
+}
+
+function SearchPanel({
+  query,
+  results,
+  isDark,
+  isHinglish,
+  onSelect,
+  onClose,
+}: {
+  query: string;
+  results: SearchResult[];
+  isDark: boolean;
+  isHinglish: boolean;
+  onSelect: (r: SearchResult) => void;
+  onClose: () => void;
+}) {
+  const panelBg = isHinglish
+    ? 'bg-white border border-rose-200/40'
+    : isDark ? 'bg-[#13132A] border border-white/[0.08]' : 'bg-white border border-slate-200/70';
+  const tp = isDark ? 'text-slate-200' : 'text-slate-800';
+  const ts = isDark ? 'text-slate-500' : 'text-slate-500';
+  const divider = isDark ? 'border-white/[0.05]' : 'border-slate-100';
+
+  return (
+    <div className={`absolute left-0 top-full mt-2 w-[420px] max-w-[calc(100vw-16px)] rounded-2xl shadow-2xl overflow-hidden animate-slide-up z-50 backdrop-blur-xl ${panelBg}`}>
+      <div className={`flex items-center justify-between px-4 py-3 border-b ${divider}`}>
+        <div className="flex items-center gap-2">
+          <Search size={14} className={isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+          <span className={`text-[13px] font-bold ${tp}`}>Search</span>
+          <span className={`text-[10px] font-semibold ${ts}`}>“{query.trim()}”</span>
+        </div>
+        <button onClick={onClose} className={`p-1.5 rounded-lg transition-all ${isDark ? 'text-slate-500 hover:bg-white/[0.05]' : 'text-slate-400 hover:bg-slate-50'}`}>
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="max-h-[min(420px,65vh)] overflow-y-auto">
+        {results.length === 0 ? (
+          <div className="py-12 flex flex-col items-center gap-2.5">
+            <span className="text-5xl opacity-25">🔎</span>
+            <p className={`text-[13px] font-semibold ${tp}`}>{isHinglish ? 'Kuch nahi mila' : 'No results'}</p>
+            <p className={`text-[11px] ${ts}`}>Try different keywords.</p>
+          </div>
+        ) : (
+          results.map((r) => (
+            <button
+              key={`${r.kind}-${r.id}`}
+              onClick={() => onSelect(r)}
+              className={`w-full text-left flex items-center gap-3 px-4 py-3.5 border-b last:border-b-0 transition-all ${divider} ${isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50/70'}`}
+            >
+              <div className={`shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center text-lg ${isDark ? 'bg-white/[0.07]' : 'bg-white'} shadow-sm`}>
+                {r.emoji}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className={`text-[12.5px] font-semibold truncate ${tp}`}>{r.title}</p>
+                  <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-full ${
+                    r.kind === 'quest'
+                      ? isHinglish ? 'bg-rose-500/10 text-rose-600' : isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'
+                      : isHinglish ? 'bg-violet-500/10 text-violet-600' : isDark ? 'bg-violet-500/10 text-violet-400' : 'bg-violet-50 text-violet-600'
+                  }`}>{r.kind === 'quest' ? 'Quest' : 'Note'}</span>
+                </div>
+                <p className={`text-[11px] mt-0.5 truncate ${ts}`}>{r.meta}</p>
+              </div>
+              {r.kind === 'quest'
+                ? <Swords size={14} className={isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+                : <FileText size={14} className={isHinglish ? 'text-violet-500' : isDark ? 'text-violet-400' : 'text-violet-500'} />}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function TopNav({
+  stats,
+  avatarFrame,
+  xpBoost,
+  focusSession,
+  focusRemainingMs,
+  onStopFocus,
+  sidebarOffsetPx,
+  onMobileMenuOpen,
+  notifications,
+  onMarkRead,
+  onMarkAllRead,
+  onClearAll,
+  searchQuery,
+  onSearchChange,
+  quests,
+  notes,
+  onNavigate,
+  onFocusQuest,
+  onFocusNote,
+}: TopNavProps) {
   const { theme, isDark, isHinglish, lang, setTheme } = useTheme();
+
+  // Boost timer (ticks only when active)
+  const boostActive = isBoostActive(xpBoost);
+  const focusActive = !!focusSession && focusRemainingMs > 0;
+  const focusQuestTitle = useMemo(() => {
+    if (!focusSession) return '';
+    const q = quests.find(x => x.id === focusSession.questId);
+    return q?.title || '';
+  }, [focusSession, quests]);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!boostActive) return;
+    const tmr = window.setInterval(() => setTick(v => v + 1), 1000);
+    return () => window.clearInterval(tmr);
+  }, [boostActive]);
+  void tick;
+  const boostLeft = boostRemainingMs(xpBoost);
   const [showThemeMenu,    setShowThemeMenu]    = useState(false);
   const [showNotifPanel,   setShowNotifPanel]   = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const [showSearchPanel,  setShowSearchPanel]  = useState(false);
   const themeRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
   const xpPercent   = Math.round((stats.xp / stats.xpToNext) * 100);
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  const results = useMemo(() => buildSearchResults(searchQuery, quests, notes, isHinglish), [searchQuery, quests, notes, isHinglish]);
+
+  const closeSearch = useCallback(() => {
+    setShowSearchPanel(false);
+    setShowMobileSearch(false);
+  }, []);
+
+  const onSelect = useCallback((r: SearchResult) => {
+    if (r.kind === 'quest') {
+      onNavigate('quests');
+      onFocusQuest(r.id);
+    } else {
+      onNavigate('notes');
+      onFocusNote(r.id);
+    }
+    closeSearch();
+  }, [closeSearch, onFocusNote, onFocusQuest, onNavigate]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (themeRef.current && !themeRef.current.contains(e.target as Node)) setShowThemeMenu(false);
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifPanel(false);
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowSearchPanel(false);
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeSearch();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [closeSearch]);
 
   const bg = isHinglish
     ? 'bg-white/60 backdrop-blur-xl border border-rose-200/20'
@@ -189,22 +427,38 @@ export function TopNav({ stats, sidebarOffsetPx, onMobileMenuOpen, notifications
         </div>
 
         {/* Search — sm+ */}
-        <div className="hidden sm:flex items-center flex-1 max-w-xs">
+        <div className="hidden sm:flex items-center flex-1 max-w-xs" ref={searchRef}>
           <div className="relative flex-1 group">
             <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${acc} opacity-50 group-focus-within:opacity-80`} />
-            <input type="text" placeholder={t('searchPlaceholder', lang)}
-              className={`w-full pl-9 pr-4 py-2 rounded-xl text-[13px] focus:outline-none focus:ring-2 transition-all ${inputBg}`} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onFocus={() => setShowSearchPanel(true)}
+              placeholder={t('searchPlaceholder', lang)}
+              className={`w-full pl-9 pr-4 py-2 rounded-xl text-[13px] focus:outline-none focus:ring-2 transition-all ${inputBg}`}
+            />
+            {showSearchPanel && searchQuery.trim().length > 0 && (
+              <SearchPanel
+                query={searchQuery}
+                results={results}
+                isDark={isDark}
+                isHinglish={isHinglish}
+                onSelect={onSelect}
+                onClose={() => setShowSearchPanel(false)}
+              />
+            )}
           </div>
         </div>
 
         {/* Search icon — xs only */}
-        <button onClick={() => setShowMobileSearch(v => !v)} aria-label="Search"
+        <button onClick={() => { setShowMobileSearch(v => !v); setShowNotifPanel(false); setShowThemeMenu(false); }} aria-label="Search"
           className={`flex sm:hidden items-center justify-center w-8 h-8 rounded-lg shrink-0 transition-all ${ib}`}>
           <Search size={15} className={acc} />
         </button>
 
         {/* XP bar — sm+ */}
-        <div className="hidden sm:flex items-center gap-2 flex-1 max-w-[200px] md:max-w-xs">
+        <div className="hidden sm:flex items-center gap-2 flex-1 max-w-[240px] md:max-w-sm">
           <div className="flex items-center gap-1.5 shrink-0">
             <Sparkles size={14} className={acc} />
             <span className={`text-[11px] font-semibold ${tl} whitespace-nowrap`}>{t('levelLabel', lang)} {stats.level}</span>
@@ -216,6 +470,54 @@ export function TopNav({ stats, sidebarOffsetPx, onMobileMenuOpen, notifications
             </div>
             <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{stats.xp}/{stats.xpToNext}</span>
           </div>
+
+          {/* XP boost pill */}
+          {boostActive && (
+            <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border ${
+              isHinglish
+                ? 'bg-violet-50/70 border-violet-200/40'
+                : isDark
+                  ? 'bg-white/[0.03] border-white/[0.06]'
+                  : 'bg-indigo-50 border-indigo-200/40'
+            }`} title="XP boost active">
+              <span className="text-sm">⚡</span>
+              <span className={`text-[10px] font-black ${isHinglish ? 'text-violet-700' : isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>{xpBoost?.multiplier}×</span>
+              <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{formatMs(boostLeft)}</span>
+            </div>
+          )}
+
+          {/* Focus pill */}
+          {focusActive && (
+            <div className={`hidden md:flex items-center overflow-hidden rounded-lg border ${
+              isHinglish
+                ? 'bg-cyan-50/70 border-cyan-200/40'
+                : isDark
+                  ? 'bg-white/[0.03] border-white/[0.06]'
+                  : 'bg-cyan-50 border-cyan-200/40'
+            }`} title={focusQuestTitle ? `Focus: ${focusQuestTitle}` : 'Focus timer'}>
+              <button
+                onClick={() => {
+                  onNavigate('quests');
+                  if (focusSession) onFocusQuest(focusSession.questId);
+                }}
+                className={`flex items-center gap-1.5 px-2 py-1 transition-all ${isDark ? 'hover:bg-white/[0.05]' : 'hover:bg-white/60'}`}
+              >
+                <span className="text-sm">⏱️</span>
+                <span className={`text-[10px] font-black ${isHinglish ? 'text-cyan-700' : isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>{formatMs(focusRemainingMs)}</span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStopFocus();
+                }}
+                className={`px-2 py-1 transition-all ${isDark ? 'text-slate-500 hover:bg-white/[0.05]' : 'text-slate-400 hover:bg-white/60'}`}
+                aria-label="Stop focus timer"
+                title="Stop"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Spacer on mobile */}
@@ -285,7 +587,9 @@ export function TopNav({ stats, sidebarOffsetPx, onMobileMenuOpen, notifications
 
         {/* Avatar */}
         <button className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all border shrink-0 ${isDark ? 'border-transparent hover:border-white/[0.05] hover:bg-white/[0.03]' : 'border-transparent hover:border-slate-200/40 hover:bg-slate-50'}`}>
-          <div className={`w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center text-sm md:text-base shadow-sm ${isHinglish ? 'bg-gradient-to-br from-rose-400 to-violet-400' : 'bg-gradient-to-br from-indigo-500 to-violet-500'}`}>
+          <div className={`w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center text-sm md:text-base shadow-sm ${
+            isHinglish ? 'bg-gradient-to-br from-rose-400 to-violet-400' : 'bg-gradient-to-br from-indigo-500 to-violet-500'
+          } ${avatarFrameClass(avatarFrame)}`}>
             {stats.avatarEmoji}
           </div>
           <div className="text-left hidden xl:block">
@@ -300,10 +604,35 @@ export function TopNav({ stats, sidebarOffsetPx, onMobileMenuOpen, notifications
         <div className="sm:hidden mx-2 mb-1 animate-slide-up">
           <div className="relative">
             <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${acc} opacity-60`} />
-            <input type="text" autoFocus placeholder={t('searchPlaceholder', lang)}
-              className={`w-full pl-9 pr-4 py-2.5 rounded-xl text-[13px] focus:outline-none focus:ring-2 transition-all ${inputBg}`}
-              onBlur={() => setShowMobileSearch(false)} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              autoFocus
+              placeholder={t('searchPlaceholder', lang)}
+              className={`w-full pl-9 pr-10 py-2.5 rounded-xl text-[13px] focus:outline-none focus:ring-2 transition-all ${inputBg}`}
+            />
+            <button
+              onClick={() => { onSearchChange(''); closeSearch(); }}
+              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg ${isDark ? 'text-slate-500 hover:bg-white/[0.05]' : 'text-slate-400 hover:bg-white/60'}`}
+              aria-label="Close search"
+            >
+              <X size={14} />
+            </button>
           </div>
+
+          {searchQuery.trim().length > 0 && (
+            <div className="relative mt-2">
+              <SearchPanel
+                query={searchQuery}
+                results={results}
+                isDark={isDark}
+                isHinglish={isHinglish}
+                onSelect={onSelect}
+                onClose={closeSearch}
+              />
+            </div>
+          )}
         </div>
       )}
     </header>

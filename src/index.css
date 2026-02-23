@@ -1,50 +1,90 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+/* ── Google Fonts — Cormorant Garamond + DM Mono + Outfit ─────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Outfit:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* ── Design Tokens ────────────────────────────────────────────────────────── */
 @theme {
-  --color-primary: #6366F1;
-  --color-primary-light: #818CF8;
-  --color-primary-dark: #4F46E5;
-  --color-accent: #8B5CF6;
-  --color-accent-light: #A78BFA;
+  /* ── Primary accent: Gold ──────────────────────────────────────── */
+  --color-primary:       #C9922A;
+  --color-primary-light: #E8B84B;
+  --color-primary-dark:  #A07020;
+
+  /* ── Secondary accent: Saffron / Violet ────────────────────────── */
+  --color-accent:        #E8622A;
+  --color-accent-light:  #F5A070;
+
+  /* ── Surfaces ───────────────────────────────────────────────────── */
   --color-surface-light: #FFFFFF;
-  --color-surface-dark: #16162A;
-  --color-bg-light: #F7F8FC;
-  --color-bg-dark: #0D0D1A;
-  --color-sidebar-light: #1A1A2E;
-  --color-sidebar-dark: #0A0A16;
-  --color-border-light: #E2E8F0;
-  --color-border-dark: #1E1E36;
-  --color-text-primary-light: #0F172A;
-  --color-text-primary-dark: #E2E8F0;
-  --color-text-secondary-light: #64748B;
-  --color-text-secondary-dark: #94A3B8;
-  --color-text-muted-light: #94A3B8;
-  --color-text-muted-dark: #475569;
-  --color-rose-muted: #D97B93;
-  --color-rose-light: #FCEEF3;
-  --color-mauve-dark: #2D1B3D;
+  --color-surface-dark:  #141009;
+
+  /* ── Backgrounds ────────────────────────────────────────────────── */
+  --color-bg-light:      #F7F8FC;
+  --color-bg-dark:       #0A0805;   /* warm black — same as analysis report */
+
+  /* ── Sidebar ────────────────────────────────────────────────────── */
+  --color-sidebar-light: #1A1208;
+  --color-sidebar-dark:  #070503;
+
+  /* ── Borders ────────────────────────────────────────────────────── */
+  --color-border-light:  #E2D8C8;
+  --color-border-dark:   #2A1E10;
+
+  /* ── Text ────────────────────────────────────────────────────────── */
+  --color-text-primary-light:    #1A0F00;
+  --color-text-primary-dark:     #F0E8D8;   /* warm cream */
+  --color-text-secondary-light:  #6B5E4A;
+  --color-text-secondary-dark:   #A89880;   /* muted gold */
+  --color-text-muted-light:      #A09070;
+  --color-text-muted-dark:       #5C5040;   /* deep muted */
+
+  /* ── Status / UI colours (kept for component compat) ────────────── */
+  --color-rose-muted:    #D97B93;
+  --color-rose-light:    #FCEEF3;
+  --color-mauve-dark:    #2D1B0D;
   --color-emerald-muted: #34D399;
-  --color-amber-muted: #D4A050;
-  --color-xp-start: #6366F1;
-  --color-xp-end: #8B5CF6;
-  --font-family-inter: 'Inter', sans-serif;
+  --color-amber-muted:   #E8B84B;
+
+  /* ── XP bar gradient ─────────────────────────────────────────────── */
+  --color-xp-start: #C9922A;
+  --color-xp-end:   #E8622A;
+
+  /* ── Fonts ───────────────────────────────────────────────────────── */
+  --font-family-display: 'Cormorant Garamond', Georgia, serif;
+  --font-family-body:    'Outfit', sans-serif;
+  --font-family-mono:    'DM Mono', 'Fira Mono', monospace;
+
+  /* keep for any legacy references */
+  --font-family-inter:   'Outfit', sans-serif;
 }
 
-* { font-family: 'Inter', sans-serif; }
+/* ── Global font override ───────────────────────────────────────────────── */
+*, *::before, *::after {
+  font-family: 'Outfit', sans-serif;
+}
+
+/* Headings use Cormorant Garamond automatically via the CSS var below.
+   Components can apply it with: font-family: var(--font-display) */
+:root {
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-body:    'Outfit', sans-serif;
+  --font-mono:    'DM Mono', monospace;
+}
+
 html, body, #root {
   width: 100%;
   overflow-x: hidden;
 }
 
-
-/* Slim scrollbar */
+/* ── Slim scrollbar — gold themed ───────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #C9922A, #E8622A);
+  border-radius: 4px;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   EXISTING ANIMATIONS (unchanged)
+   ANIMATIONS (unchanged)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 @keyframes float {
@@ -90,8 +130,8 @@ html, body, #root {
   to { transform: rotate(360deg); }
 }
 @keyframes glow-soft {
-  0%, 100% { box-shadow: 0 0 0 rgba(99, 102, 241, 0); }
-  50% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.15); }
+  0%, 100% { box-shadow: 0 0 0 rgba(201, 146, 42, 0); }
+  50% { box-shadow: 0 0 20px rgba(201, 146, 42, 0.18); }
 }
 
 .animate-float          { animation: float 4s ease-in-out infinite; }
@@ -108,12 +148,12 @@ html, body, #root {
   animation: gradient-shift 6s ease infinite;
 }
 
+/* ── Quest card difficulty borders — gold palette ───────────────────────── */
 .quest-card-easy      { border-left: 3px solid #34D399; }
-.quest-card-medium    { border-left: 3px solid #FBBF24; }
-.quest-card-hard      { border-left: 3px solid #F87171; }
-.quest-card-legendary { border-left: 3px solid #A78BFA; }
+.quest-card-medium    { border-left: 3px solid #E8B84B; }
+.quest-card-hard      { border-left: 3px solid #E8622A; }
+.quest-card-legendary { border-left: 3px solid #C9922A; }
 .quest-card-overdue   { border-left: 3px solid #EF4444; }
-
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -132,7 +172,6 @@ html, body, #root {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-
 .line-clamp-3 {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -141,14 +180,9 @@ html, body, #root {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   NEW: LEVEL-UP OVERLAY ANIMATIONS
+   LEVEL-UP OVERLAY ANIMATIONS (unchanged logic, glow updated to gold)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Confetti piece fall ─────────────────────────────────────────────────────
-   Uses CSS custom properties (--drift, --rot-end) set inline per piece.
-   Each piece falls from -5% to 105% of viewport height while drifting
-   horizontally and rotating continuously.
-──────────────────────────────────────────────────────────────────────────── */
 @keyframes confetti-fall {
   0% {
     opacity: 0;
@@ -167,22 +201,16 @@ html, body, #root {
     transform: translateY(105vh) translateX(var(--drift, 40px)) rotate(calc(var(--rot-end, 0deg) * 4)) scale(0.6);
   }
 }
-
-/* ── Backdrop fade-in ────────────────────────────────────────────────────── */
 @keyframes levelup-backdrop-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-
-/* ── Card scale + fade in (spring feel) ─────────────────────────────────── */
 @keyframes levelup-card-in {
   0%   { opacity: 0; transform: scale(0.75) translateY(24px); }
   60%  { opacity: 1; transform: scale(1.03) translateY(-4px); }
   80%  { transform: scale(0.98) translateY(2px); }
   100% { transform: scale(1) translateY(0); }
 }
-
-/* ── Level badge pop (bouncy scale) ──────────────────────────────────────── */
 @keyframes levelup-badge {
   0%   { transform: scale(0) rotate(-20deg); opacity: 0; }
   50%  { transform: scale(1.18) rotate(6deg); opacity: 1; }
@@ -190,104 +218,52 @@ html, body, #root {
   85%  { transform: scale(1.06) rotate(2deg); }
   100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
-
-/* ── Level number count-up illusion (pops in large) ─────────────────────── */
 @keyframes levelup-number-pop {
   0%   { transform: scale(0.4); opacity: 0; filter: blur(4px); }
   60%  { transform: scale(1.15); opacity: 1; filter: blur(0); }
   100% { transform: scale(1); opacity: 1; }
 }
-
-/* ── Sparkle dots radiate outward ────────────────────────────────────────── */
 @keyframes levelup-sparkle {
   0%   { opacity: 0; transform: rotate(var(--deg, 0deg)) translateY(-50px) scale(0); }
   40%  { opacity: 1; transform: rotate(var(--deg, 0deg)) translateY(-80px) scale(1.4); }
   70%  { opacity: 0.6; }
   100% { opacity: 0; transform: rotate(var(--deg, 0deg)) translateY(-100px) scale(0.2); }
 }
-
-/* ── Ripple rings expand from centre ─────────────────────────────────────── */
 @keyframes levelup-ripple {
   0%   { transform: scale(0.3); opacity: 0.8; }
   100% { transform: scale(2.2); opacity: 0; }
 }
-
-/* ── Text lines slide up sequentially ───────────────────────────────────── */
 @keyframes levelup-text {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
-/* ── Stats row fade + rise ───────────────────────────────────────────────── */
 @keyframes levelup-stats-in {
   from { opacity: 0; transform: translateY(16px) scale(0.96); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
-
-/* ── Achievement cards slide in from right ───────────────────────────────── */
 @keyframes levelup-achievement-in {
   from { opacity: 0; transform: translateX(24px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-
-/* ── CTA button pulse when idle ─────────────────────────────────────────── */
 @keyframes levelup-cta-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
-  50%       { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.2); }
+  /* updated glow color to gold */
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 146, 42, 0); }
+  50%       { box-shadow: 0 0 0 8px rgba(201, 146, 42, 0.22); }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   LEVEL-UP UTILITY CLASSES
-   Applied directly in LevelUpOverlay.tsx
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-.levelup-backdrop {
-  animation: levelup-backdrop-in 0.25s ease-out forwards;
-}
-
-.levelup-card {
-  animation: levelup-card-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.05s both;
-}
-
-.levelup-badge-pop {
-  animation: levelup-badge 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
-}
-
-.levelup-number {
-  display: inline-block;
-  animation: levelup-number-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s both;
-}
-
-.levelup-sparkle {
-  animation: levelup-sparkle 0.9s ease-out both;
-}
-
-.levelup-ripple {
-  animation: levelup-ripple 1.8s ease-out infinite both;
-}
-
-.levelup-text-1 {
-  animation: levelup-text 0.4s ease-out 0.55s both;
-}
-.levelup-text-2 {
-  animation: levelup-text 0.4s ease-out 0.65s both;
-}
-.levelup-text-3 {
-  animation: levelup-text 0.4s ease-out 0.75s both;
-}
-
-.levelup-stats {
-  animation: levelup-stats-in 0.45s ease-out 0.85s both;
-}
-
-.levelup-achievement {
-  animation: levelup-achievement-in 0.4s ease-out both;
-}
-
+.levelup-backdrop       { animation: levelup-backdrop-in 0.25s ease-out forwards; }
+.levelup-card           { animation: levelup-card-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.05s both; }
+.levelup-badge-pop      { animation: levelup-badge 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both; }
+.levelup-number         { display: inline-block; animation: levelup-number-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s both; }
+.levelup-sparkle        { animation: levelup-sparkle 0.9s ease-out both; }
+.levelup-ripple         { animation: levelup-ripple 1.8s ease-out infinite both; }
+.levelup-text-1         { animation: levelup-text 0.4s ease-out 0.55s both; }
+.levelup-text-2         { animation: levelup-text 0.4s ease-out 0.65s both; }
+.levelup-text-3         { animation: levelup-text 0.4s ease-out 0.75s both; }
+.levelup-stats          { animation: levelup-stats-in 0.45s ease-out 0.85s both; }
+.levelup-achievement    { animation: levelup-achievement-in 0.4s ease-out both; }
 .levelup-cta {
   animation:
     levelup-text 0.4s ease-out 1.1s both,
     levelup-cta-pulse 2.5s ease-in-out 2s infinite;
 }
-
-/* confetti-piece uses inline animation set from JS, no class needed */

@@ -3,7 +3,8 @@ export type NotificationType =
   | 'achievement'
   | 'streak'
   | 'daily_challenge'
-  | 'level_up';
+  | 'level_up'
+  | 'focus';
 
 export interface AppNotification {
   id: string;
@@ -21,6 +22,7 @@ export const notificationIcons: Record<NotificationType, string> = {
   streak:          '🔥',
   daily_challenge: '⚡',
   level_up:        '🚀',
+  focus:           '⏱️',
 };
 
 export function makeNotification(

@@ -1,5 +1,5 @@
 import { Plus, Search, X, Tag } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
 import type { Note } from '../store';
@@ -9,11 +9,18 @@ interface NotesVaultProps {
   notes: Note[];
   onAdd: (note: Omit<Note, 'id' | 'createdAt'>) => void;
   onDelete: (id: string) => void;
+
+  /** Optional global search query from TopNav. */
+  externalSearchQuery?: string;
+  /** If provided, scroll to and open the note preview. */
+  focusNoteId?: string | null;
+  /** Called after focus has been applied so parent can clear it. */
+  onFocusHandled?: () => void;
 }
 
 const emojis = ['📜', '💡', '⚛️', '🎯', '📋', '📚', '🧘', '🧪', '🎨', '🕉️', '🪷', '✨'];
 
-export function NotesVault({ notes, onAdd, onDelete }: NotesVaultProps) {
+export function NotesVault({ notes, onAdd, onDelete, externalSearchQuery = '', focusNoteId, onFocusHandled }: NotesVaultProps) {
   const { isDark, isHinglish, lang } = useTheme();
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,11 +47,28 @@ export function NotesVault({ notes, onAdd, onDelete }: NotesVaultProps) {
       : 'bg-slate-50/80 border-slate-200/50 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30';
 
   const allTags = Array.from(new Set(notes.flatMap(n => n.tags)));
-  const filteredNotes = notes.filter(n => {
-    const matchSearch = !searchQuery || n.title.toLowerCase().includes(searchQuery.toLowerCase()) || n.content.toLowerCase().includes(searchQuery.toLowerCase());
+  // Sync with global search bar (Bug #3 fix).
+  useEffect(() => {
+    if (externalSearchQuery.trim().length === 0) return;
+    setSearchQuery(externalSearchQuery);
+  }, [externalSearchQuery]);
+
+  const filteredNotes = useMemo(() => notes.filter(n => {
+    const q = searchQuery.toLowerCase();
+    const matchSearch = !searchQuery || n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q) || n.tags.some(tag => tag.toLowerCase().includes(q));
     const matchTag = !selectedTag || n.tags.includes(selectedTag);
     return matchSearch && matchTag;
-  });
+  }), [notes, searchQuery, selectedTag]);
+
+  // Focus/highlight from global search.
+  useEffect(() => {
+    if (!focusNoteId) return;
+    const note = notes.find(n => n.id === focusNoteId);
+    const el = document.getElementById(`note-${focusNoteId}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (note) setPreviewNote(note);
+    setTimeout(() => onFocusHandled?.(), 450);
+  }, [focusNoteId, notes, onFocusHandled]);
 
   const handleAdd = () => {
     if (!newTitle.trim()) return;
@@ -161,9 +185,19 @@ export function NotesVault({ notes, onAdd, onDelete }: NotesVaultProps) {
 
       {/* Notes Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredNotes.map((note, index) => (
-          <div key={note.id} onClick={() => setPreviewNote(note)}
-            className={`${card} rounded-2xl p-4 cursor-pointer group hover:-translate-y-0.5 hover:shadow-md transition-all duration-300 relative overflow-hidden`}
+        {filteredNotes.map((note, index) => {
+          const isFocused = focusNoteId === note.id;
+          return (
+          <div key={note.id} id={`note-${note.id}`} onClick={() => setPreviewNote(note)}
+            className={`${card} rounded-2xl p-4 cursor-pointer group hover:-translate-y-0.5 hover:shadow-md transition-all duration-300 relative overflow-hidden ${
+              isFocused
+                ? isHinglish
+                  ? 'ring-2 ring-rose-400/40'
+                  : isDark
+                    ? 'ring-2 ring-indigo-400/30'
+                    : 'ring-2 ring-indigo-400/30'
+                : ''
+            }`}
             style={{ animationDelay: `${index * 60}ms` }}
           >
             <div className="absolute top-0 left-0 w-full h-[2px]" style={{ backgroundColor: note.color }} />
@@ -189,7 +223,8 @@ export function NotesVault({ notes, onAdd, onDelete }: NotesVaultProps) {
               <span className={`text-[10px] ${tm}`}>{note.createdAt}</span>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {filteredNotes.length === 0 && (
