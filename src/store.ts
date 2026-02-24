@@ -1,7 +1,7 @@
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'legendary';
 export type QuestStatus = 'active' | 'completed';
 export type Recurrence = 'none' | 'daily' | 'weekly';
-export type Page = 'dashboard' | 'quests' | 'notes' | 'achievements' | 'challenges' | 'shop';
+export type Page = 'dashboard' | 'quests' | 'notes' | 'achievements' | 'challenges' | 'shop' | 'profile';
 
 export interface FocusSession {
   questId: string;
@@ -28,14 +28,29 @@ export interface Quest {
   status: QuestStatus;
   category: string;
 
+  /** Optional: XP actually earned at completion (after boosts). */
+  earnedXp?: number;
+
   // New features
   recurring: Recurrence;
   /** YYYY-MM-DD of completion (used for recurring resets). Empty when not completed. */
   completedAt: string;
+  /** Epoch ms of completion for time-based achievements (optional). */
+  completedAtTs?: number;
   /** Optional list of checklist items. */
   subtasks: SubTask[];
   /** Optional special title badge (from Mudra Shop). */
   badge: string; // TitleBadgeId, kept as string for backward-compat
+}
+
+export interface NoteRevision {
+  /** ISO timestamp when this revision was created (edit time). */
+  editedAt: string;
+  title: string;
+  content: string;
+  tags: string[];
+  color: string;
+  emoji: string;
 }
 
 export interface Note {
@@ -44,9 +59,37 @@ export interface Note {
   content: string;
   tags: string[];
   color: string;
+  /** ISO timestamp of creation. */
   createdAt: string;
+  /** ISO timestamp of last edit (optional). */
+  updatedAt?: string;
+  /** Previous versions (newest first). */
+  revisions?: NoteRevision[];
   emoji: string;
 }
+
+export type AchievementCriteria = {
+  /** Level requirement. */
+  minLevel?: number;
+  /** Current streak requirement. */
+  minStreak?: number;
+  /** Best streak ever achieved. */
+  minStreakRecord?: number;
+  /** Total quests completed (lifetime). */
+  minQuestsCompleted?: number;
+  /** Quests completed on a specific day (usually today). */
+  minQuestsCompletedInDay?: number;
+  /** Notes (Vidya scrolls) created (lifetime). */
+  minNotesCreated?: number;
+  /** Require at least one completed quest of this difficulty. */
+  anyCompletedDifficulty?: Difficulty;
+  /** Unlock if a quest was completed before this local hour (e.g., 6 = before dawn). */
+  questCompletedBeforeHour?: number;
+  /** Unlock if a note was created before this local hour (e.g., 3 = after midnight). */
+  noteCreatedBeforeHour?: number;
+  /** Special: unlock when all other achievements are unlocked. */
+  requiresAllOtherAchievements?: boolean;
+};
 
 export interface Achievement {
   id: string;
@@ -55,6 +98,8 @@ export interface Achievement {
   icon: string;
   unlocked: boolean;
   xpRequired: number;
+  /** Optional semantic unlock rules (in addition to xpRequired). */
+  criteria?: AchievementCriteria;
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
 }
 
@@ -67,6 +112,8 @@ export interface UserStats {
   totalXpEarned: number;
   coins: number;
   streak: number;
+  /** Best streak ever achieved. */
+  streakRecord: number;
   lastActiveDate: string; // YYYY-MM-DD, '' if never active
   /** YYYY-MM-DD of the last "daily challenges available" notification. */
   lastDailyChallengeNotified: string;
@@ -75,6 +122,14 @@ export interface UserStats {
   avatarEmoji: string;
   username: string;
 }
+
+// Optional event type used by analytics (safe even if you don't persist it yet).
+export type FocusLogEvent = {
+  earnedAt: number; // epoch ms
+  category: string;
+  xp: number;
+  questId?: string;
+};
 
 export const difficultyConfig: Record<Difficulty, { label: string; color: string; bg: string; darkBg: string; xp: number }> = {
   easy: { label: 'Sahaj', color: 'text-emerald-600', bg: 'bg-emerald-50', darkBg: 'bg-emerald-500/10', xp: 10 },
@@ -100,27 +155,27 @@ export const defaultQuests: Quest[] = [
 ];
 
 export const defaultNotes: Note[] = [
-  { id: '1', title: 'React Chakra Patterns', content: 'Compound components, render props, custom hooks – master these like Arjuna mastered the bow.', tags: ['React', 'Code'], color: '#6366F1', createdAt: '2 hours ago', emoji: '⚛️' },
-  { id: '2', title: 'Weekly Sankalp Plan', content: 'Ship feature X, review PRs, plan sprint. Each task a step on the path of Dharma.', tags: ['Planning', 'Karma'], color: '#0EA5E9', createdAt: '5 hours ago', emoji: '🎯' },
-  { id: '3', title: 'Creative Ideas Vault', content: 'AI-powered habit tracker, gamified reading app, micro-journaling with raga-based moods.', tags: ['Ideas', 'Creative'], color: '#8B5CF6', createdAt: '1 day ago', emoji: '💡' },
-  { id: '4', title: 'Sprint Review Notes', content: 'Team velocity up 15%, address tech debt. Demo went as smooth as a Kathak performance!', tags: ['Meeting', 'Karma'], color: '#EC4899', createdAt: '2 days ago', emoji: '📋' },
-  { id: '5', title: 'Gita Wisdom Notes', content: 'कर्मण्येवाधिकारस्ते मा फलेषु कदाचन – Focus on actions, not on the fruits of actions.', tags: ['Wisdom', 'Vidya'], color: '#F59E0B', createdAt: '3 days ago', emoji: '🕉️' },
-  { id: '6', title: 'Yoga & Wellness Log', content: 'Surya Namaskar, Pranayama, Dhyana. Balance mind-body like the perfect Nataraja pose.', tags: ['Yoga', 'Wellness'], color: '#10B981', createdAt: '4 days ago', emoji: '🧘' },
+  { id: '1', title: 'React Chakra Patterns', content: 'Compound components, render props, custom hooks – master these like Arjuna mastered the bow.', tags: ['React', 'Code'], color: '#6366F1', createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(), emoji: '⚛️' },
+  { id: '2', title: 'Weekly Sankalp Plan', content: 'Ship feature X, review PRs, plan sprint. Each task a step on the path of Dharma.', tags: ['Planning', 'Karma'], color: '#0EA5E9', createdAt: new Date(Date.now() - 5 * 3600_000).toISOString(), emoji: '🎯' },
+  { id: '3', title: 'Creative Ideas Vault', content: 'AI-powered habit tracker, gamified reading app, micro-journaling with raga-based moods.', tags: ['Ideas', 'Creative'], color: '#8B5CF6', createdAt: new Date(Date.now() - 24 * 3600_000).toISOString(), emoji: '💡' },
+  { id: '4', title: 'Sprint Review Notes', content: 'Team velocity up 15%, address tech debt. Demo went as smooth as a Kathak performance!', tags: ['Meeting', 'Karma'], color: '#EC4899', createdAt: new Date(Date.now() - 2 * 24 * 3600_000).toISOString(), emoji: '📋' },
+  { id: '5', title: 'Gita Wisdom Notes', content: 'कर्मण्येवाधिकारस्ते मा फलेषु कदाचन – Focus on actions, not on the fruits of actions.', tags: ['Wisdom', 'Vidya'], color: '#F59E0B', createdAt: new Date(Date.now() - 3 * 24 * 3600_000).toISOString(), emoji: '🕉️' },
+  { id: '6', title: 'Yoga & Wellness Log', content: 'Surya Namaskar, Pranayama, Dhyana. Balance mind-body like the perfect Nataraja pose.', tags: ['Yoga', 'Wellness'], color: '#10B981', createdAt: new Date(Date.now() - 4 * 24 * 3600_000).toISOString(), emoji: '🧘' },
 ];
 
 export const defaultAchievements: Achievement[] = [
-  { id: '1', title: "Arjuna's First Arrow", description: 'Complete your first karma quest', icon: '🏹', unlocked: true, xpRequired: 0, rarity: 'common' },
-  { id: '2', title: "Hanuman's Devotion", description: 'Reach a 3-day tapasya streak', icon: '🪔', unlocked: true, xpRequired: 50, rarity: 'common' },
-  { id: '3', title: "Saraswati's Blessing", description: 'Create 5 vidya scrolls', icon: '🪷', unlocked: true, xpRequired: 100, rarity: 'rare' },
-  { id: '4', title: 'Karma Yogi', description: 'Complete 10 quests', icon: '🕉️', unlocked: true, xpRequired: 200, rarity: 'rare' },
-  { id: '5', title: "Durga's Shield", description: 'Complete a Kathin quest', icon: '🛡️', unlocked: true, xpRequired: 300, rarity: 'epic' },
-  { id: '6', title: "Vayu's Speed", description: 'Complete 5 quests in one day', icon: '💨', unlocked: false, xpRequired: 400, rarity: 'epic' },
-  { id: '7', title: 'Chakravarti', description: 'Reach Level 10', icon: '👑', unlocked: false, xpRequired: 500, rarity: 'legendary' },
-  { id: '8', title: 'Vidya Guru', description: 'Create 20 knowledge scrolls', icon: '📿', unlocked: false, xpRequired: 600, rarity: 'legendary' },
-  { id: '9', title: 'Tapasvi Supreme', description: '30-day tapasya streak', icon: '💎', unlocked: false, xpRequired: 800, rarity: 'legendary' },
-  { id: '10', title: 'Moksha', description: 'Unlock all achievements', icon: '✨', unlocked: false, xpRequired: 1000, rarity: 'legendary' },
-  { id: '11', title: 'Brahma Muhurta', description: 'Complete quest before dawn', icon: '🌅', unlocked: false, xpRequired: 150, rarity: 'rare' },
-  { id: '12', title: 'Chandra Dev', description: 'Create a scroll after midnight', icon: '🌙', unlocked: false, xpRequired: 250, rarity: 'rare' },
+  { id: '1', title: "Arjuna's First Arrow", description: 'Complete your first karma quest', icon: '🏹', unlocked: true, xpRequired: 0, criteria: { minQuestsCompleted: 1 }, rarity: 'common' },
+  { id: '2', title: "Hanuman's Devotion", description: 'Reach a 3-day tapasya streak', icon: '🪔', unlocked: true, xpRequired: 50, criteria: { minStreak: 3 }, rarity: 'common' },
+  { id: '3', title: "Saraswati's Blessing", description: 'Create 5 vidya scrolls', icon: '🪷', unlocked: true, xpRequired: 100, criteria: { minNotesCreated: 5 }, rarity: 'rare' },
+  { id: '4', title: 'Karma Yogi', description: 'Complete 10 quests', icon: '🕉️', unlocked: true, xpRequired: 200, criteria: { minQuestsCompleted: 10 }, rarity: 'rare' },
+  { id: '5', title: "Durga's Shield", description: 'Complete a Kathin quest', icon: '🛡️', unlocked: true, xpRequired: 300, criteria: { anyCompletedDifficulty: 'hard' }, rarity: 'epic' },
+  { id: '6', title: "Vayu's Speed", description: 'Complete 5 quests in one day', icon: '💨', unlocked: false, xpRequired: 400, criteria: { minQuestsCompletedInDay: 5 }, rarity: 'epic' },
+  { id: '7', title: 'Chakravarti', description: 'Reach Level 10', icon: '👑', unlocked: false, xpRequired: 500, criteria: { minLevel: 10 }, rarity: 'legendary' },
+  { id: '8', title: 'Vidya Guru', description: 'Create 20 knowledge scrolls', icon: '📿', unlocked: false, xpRequired: 600, criteria: { minNotesCreated: 20 }, rarity: 'legendary' },
+  { id: '9', title: 'Tapasvi Supreme', description: '30-day tapasya streak', icon: '💎', unlocked: false, xpRequired: 800, criteria: { minStreakRecord: 30 }, rarity: 'legendary' },
+  { id: '10', title: 'Moksha', description: 'Unlock all achievements', icon: '✨', unlocked: false, xpRequired: 1000, criteria: { requiresAllOtherAchievements: true }, rarity: 'legendary' },
+  { id: '11', title: 'Brahma Muhurta', description: 'Complete quest before dawn', icon: '🌅', unlocked: false, xpRequired: 150, criteria: { questCompletedBeforeHour: 6 }, rarity: 'rare' },
+  { id: '12', title: 'Chandra Dev', description: 'Create a scroll after midnight', icon: '🌙', unlocked: false, xpRequired: 250, criteria: { noteCreatedBeforeHour: 3 }, rarity: 'rare' },
 ];
 
 export const motivationalQuotes = [
@@ -177,12 +232,37 @@ export type ParsedDueDate = {
   label: string;
   /** Normalized ISO date if we could resolve it; empty string otherwise. */
   iso: string;
+  /** Local-midnight Date for calendar views; null if unknown. */
+  date: Date | null;
   /** Whole-day difference from today (negative = overdue). null if unknown. */
   daysFromToday: number | null;
   isOverdue: boolean;
   isDueToday: boolean;
   /** "Soon" = within the next 3 days (excluding today). */
   isDueSoon: boolean;
+};
+
+// ── Weekly progress report (shareable card) ────────────────────────────────
+export type WeeklyReport = {
+  /** Unique id for UI lists (not used for logic). */
+  id: string;
+  /** Monday of the week (local time) as YYYY-MM-DD. */
+  weekStart: string;
+  /** Sunday of the week (local time) as YYYY-MM-DD. */
+  weekEnd: string;
+  /** When the report was generated (ISO timestamp). */
+  generatedAt: string;
+  /** Weekly totals */
+  questsCompleted: number;
+  xpEarned: number;
+  coinsEarned: number;
+  /** Streak snapshot at generation time */
+  streakDays: number;
+  /** For branding */
+  username: string;
+  avatarEmoji: string;
+  /** Optional: whether user hid it from the dashboard */
+  dismissedAt?: string;
 };
 
 /**
@@ -193,7 +273,7 @@ export type ParsedDueDate = {
 export function parseDueDate(raw: string): ParsedDueDate {
   const s = (raw || '').trim();
   if (!s) {
-    return { label: '', iso: '', daysFromToday: null, isOverdue: false, isDueToday: false, isDueSoon: false };
+    return { label: '', iso: '', date: null, daysFromToday: null, isOverdue: false, isDueToday: false, isDueSoon: false };
   }
 
   const today = todayISO();
@@ -209,7 +289,7 @@ export function parseDueDate(raw: string): ParsedDueDate {
 
   if (!iso) {
     // Unknown format – show as-is, but treat as "no sortable date"
-    return { label: s, iso: '', daysFromToday: null, isOverdue: false, isDueToday: false, isDueSoon: false };
+    return { label: s, iso: '', date: null, daysFromToday: null, isOverdue: false, isDueToday: false, isDueSoon: false };
   }
 
   const [y, m, d] = iso.split('-').map(Number);
@@ -237,7 +317,7 @@ export function parseDueDate(raw: string): ParsedDueDate {
     label = `Overdue • ${label}`;
   }
 
-  return { label, iso, daysFromToday, isOverdue, isDueToday, isDueSoon };
+  return { label, iso, date: due, daysFromToday, isOverdue, isDueToday, isDueSoon };
 }
 
 /**

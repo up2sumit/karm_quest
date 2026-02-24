@@ -1,9 +1,11 @@
-import { Plus, Check, Clock, Star, Filter, Sparkles, AlertCircle, CalendarDays, List } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Plus, Check, Clock, Star, Filter, Sparkles, AlertCircle, CalendarDays, List, Pencil, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
-import type { Quest, Difficulty } from '../store';
+import type { Quest, Difficulty, Recurrence, SubTask, FocusSession } from '../store';
 import { difficultyConfig as defaultDiffConfig, parseDueDate, dueDateSortKey, todayISO } from '../store';
+
+import { formatMs, titleBadgeMeta, titleBadgePillClass } from '../shop';
 
 import { QuestCalendar } from './QuestCalendar';
 
@@ -11,6 +13,19 @@ interface QuestBoardProps {
   quests: Quest[];
   onComplete: (id: string) => void;
   onAdd: (quest: Omit<Quest, 'id' | 'status'>) => void;
+
+  // Keep existing advanced functionality (no removals)
+  onUpdate: (id: string, patch: Partial<Omit<Quest, 'id'>>) => void;
+  ownedBadges: string[];
+  searchQuery?: string;
+  focusQuestId?: string | null;
+  onFocusHandled?: () => void;
+
+  // Focus Timer
+  focusSession: FocusSession | null;
+  focusNowMs: number;
+  onStartFocus: (questId: string) => void;
+  onStopFocus: (reason?: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,9 +103,10 @@ function DueDateBadge({
 // ─────────────────────────────────────────────────────────────────────────────
 // QuestBoard
 // ─────────────────────────────────────────────────────────────────────────────
-export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
-  const { isDark, isHinglish, lang } = useTheme();
+export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, searchQuery = '', focusQuestId, onFocusHandled, focusSession, focusNowMs, onStartFocus, onStopFocus }: QuestBoardProps) {
+  const { isDark, isHinglish, lang, theme } = useTheme();
   const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const [selectedISO, setSelectedISO] = useState<string>(todayISO());
@@ -98,11 +114,114 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
   const [newDifficulty, setNewDifficulty] = useState<Difficulty>('easy');
   const [newCategory, setNewCategory] = useState('Karma');
   const [newDueDate, setNewDueDate] = useState<string>(todayISO()); // real ISO date, defaults to today
+  const [showPowerFields, setShowPowerFields] = useState(false);
+  const [newRecurring, setNewRecurring] = useState<Recurrence>('none');
+  const [newBadge, setNewBadge] = useState<string>('none');
+  const [newSubtasks, setNewSubtasks] = useState<SubTask[]>([]);
+  const [newSubtaskText, setNewSubtaskText] = useState('');
   const [completedAnimation, setCompletedAnimation] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [subtaskDraft, setSubtaskDraft] = useState<string>('');
+
+  // Edit modal drafts
+  const [editTitle, setEditTitle] = useState('');
+  const [editDifficulty, setEditDifficulty] = useState<Difficulty>('easy');
+  const [editCategory, setEditCategory] = useState('');
+  const [editDueDate, setEditDueDate] = useState<string>('');
+  const [editRecurring, setEditRecurring] = useState<Recurrence>('none');
+  const [editBadge, setEditBadge] = useState<string>('none');
+  const [editSubtasks, setEditSubtasks] = useState<SubTask[]>([]);
+  const [editSubtaskText, setEditSubtaskText] = useState('');
+
+  // Scroll/focus from TopNav global search
+  useEffect(() => {
+    if (!focusQuestId) return;
+    const el = document.getElementById(`quest-${focusQuestId}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setExpandedId(focusQuestId);
+    setTimeout(() => onFocusHandled?.(), 450);
+  }, [focusQuestId, onFocusHandled]);
 
   const diffLabels: Record<Difficulty, string> = {
     easy: t('diffSahaj', lang), medium: t('diffMadhyam', lang),
     hard: t('diffKathin', lang), legendary: t('diffDivya', lang),
+  };
+
+  const badgeOptions = useMemo(() => {
+    const set = new Set<string>(['none']);
+    (ownedBadges || []).forEach((b) => set.add(String(b)));
+    return Array.from(set);
+  }, [ownedBadges]);
+
+  const editQuest = useMemo(() => {
+    if (!editId) return null;
+    return quests.find((q) => q.id === editId) ?? null;
+  }, [editId, quests]);
+
+  const openEdit = (q: Quest) => {
+    setEditId(q.id);
+    setEditTitle(q.title || '');
+    setEditDifficulty(q.difficulty || 'easy');
+    setEditCategory(q.category || '');
+    // Normalize legacy seed labels (Today/Tomorrow/etc.) to ISO for the date input.
+    setEditDueDate(parseDueDate(q.dueDate).iso || '');
+    setEditRecurring((q.recurring || 'none') as Recurrence);
+    setEditBadge((q.badge || 'none') as string);
+    setEditSubtasks(Array.isArray(q.subtasks) ? q.subtasks.map((s) => ({ ...s })) : []);
+    setEditSubtaskText('');
+  };
+
+  const closeEdit = () => {
+    setEditId(null);
+    setEditTitle('');
+    setEditCategory('');
+    setEditDueDate('');
+    setEditRecurring('none');
+    setEditBadge('none');
+    setEditSubtasks([]);
+    setEditSubtaskText('');
+  };
+
+  const saveEdit = () => {
+    if (!editQuest) return closeEdit();
+    const title = editTitle.trim();
+    if (!title) return;
+
+    const category = (editCategory || '').trim() || (editQuest.category || 'Karma');
+    const cleanSubtasks = (Array.isArray(editSubtasks) ? editSubtasks : [])
+      .map((s) => ({ ...s, text: (s.text || '').trim() }))
+      .filter((s) => !!s.text);
+
+    onUpdate(editQuest.id, {
+      title,
+      difficulty: editDifficulty,
+      xpReward: defaultDiffConfig[editDifficulty].xp,
+      category,
+      dueDate: (editDueDate || '').trim(),
+      recurring: editRecurring,
+      badge: editBadge,
+      subtasks: cleanSubtasks,
+    });
+    closeEdit();
+  };
+
+  const addEditSubtask = () => {
+    const text = editSubtaskText.trim();
+    if (!text) return;
+    setEditSubtasks((prev) => [...prev, { id: `edit-${Date.now()}`, text, done: false }]);
+    setEditSubtaskText('');
+  };
+
+  const updateEditSubtaskText = (id: string, text: string) => {
+    setEditSubtasks((prev) => prev.map((s) => (s.id === id ? { ...s, text } : s)));
+  };
+
+  const toggleEditSubtaskDone = (id: string) => {
+    setEditSubtasks((prev) => prev.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
+  };
+
+  const removeEditSubtask = (id: string) => {
+    setEditSubtasks((prev) => prev.filter((s) => s.id !== id));
   };
 
   // ── Theme-aware class groups ──────────────────────────────────────────────
@@ -123,8 +242,19 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
     : 'bg-gradient-to-r from-indigo-500 to-violet-500';
 
   // ── Quest buckets ──────────────────────────────────────────────────────────
-  const activeQuests = quests.filter(q => q.status === 'active');
-  const completedQuests = quests.filter(q => q.status === 'completed');
+  const visibleQuests = useMemo(() => {
+    const qSearch = (searchQuery || '').trim().toLowerCase();
+    if (!qSearch) return quests;
+    return quests.filter((q) =>
+      (q.title || '').toLowerCase().includes(qSearch) ||
+      (q.category || '').toLowerCase().includes(qSearch) ||
+      (q.difficulty || '').toLowerCase().includes(qSearch)
+    );
+  }, [quests, searchQuery]);
+
+
+  const activeQuests = visibleQuests.filter(q => q.status === 'active');
+  const completedQuests = visibleQuests.filter(q => q.status === 'completed');
   const overdueCount = activeQuests.filter(q => parseDueDate(q.dueDate).isOverdue).length;
 
   // Active quests: sorted by due date ascending (overdue first → today → tomorrow → future → no date)
@@ -142,10 +272,9 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
   // ── Calendar buckets (by ISO date) ───────────────────────────────────────
   const questsByISO = useMemo(() => {
     const map = new Map<string, Quest[]>();
-    for (const q of quests) {
-      const d = parseDueDate(q.dueDate).date;
-      if (!d) continue;
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    for (const q of visibleQuests) {
+      const iso = parseDueDate(q.dueDate).iso;
+      if (!iso) continue;
       const arr = map.get(iso);
       if (arr) arr.push(q);
       else map.set(iso, [q]);
@@ -161,7 +290,7 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
       );
     }
     return map;
-  }, [quests]);
+  }, [visibleQuests]);
 
   const selectedDayQuests = useMemo(() => {
     const list = questsByISO.get(selectedISO) ?? [];
@@ -172,6 +301,9 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleComplete = (id: string) => {
+    if (focusSession?.questId === id) {
+      onStopFocus('Quest completed. Focus ended.');
+    }
     setCompletedAnimation(id);
     setTimeout(() => { onComplete(id); setCompletedAnimation(null); }, 500);
   };
@@ -182,23 +314,309 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
       title: newTitle,
       difficulty: newDifficulty,
       xpReward: defaultDiffConfig[newDifficulty].xp,
-      dueDate: newDueDate, // real ISO date string, never the hardcoded "Today" string
+      dueDate: newDueDate, // ISO date string
       category: newCategory,
+      recurring: newRecurring,
+      completedAt: '',
+      subtasks: newSubtasks.map((s) => ({ ...s, done: false })),
+      badge: newBadge,
     });
-    // Reset form fields — default due date back to today
+    // Reset form fields
     setNewTitle('');
     setNewDueDate(todayISO());
+    setNewRecurring('none');
+    setNewBadge('none');
+    setNewSubtasks([]);
+    setNewSubtaskText('');
+    setShowPowerFields(false);
     setShowForm(false);
   };
 
   const handleCancelForm = () => {
     setNewTitle('');
     setNewDueDate(todayISO());
+    setNewRecurring('none');
+    setNewBadge('none');
+    setNewSubtasks([]);
+    setNewSubtaskText('');
+    setShowPowerFields(false);
     setShowForm(false);
+  };
+
+  const addNewSubtask = () => {
+    const text = newSubtaskText.trim();
+    if (!text) return;
+    setNewSubtasks((prev) => [...prev, { id: `new-${Date.now()}`, text, done: false }]);
+    setNewSubtaskText('');
+  };
+
+  const removeNewSubtask = (id: string) => {
+    setNewSubtasks((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+    setSubtaskDraft('');
+  };
+
+  const toggleSubtask = (quest: Quest, subId: string) => {
+    const list: SubTask[] = Array.isArray(quest.subtasks) ? quest.subtasks : [];
+    const next = list.map((s) => (s.id === subId ? { ...s, done: !s.done } : s));
+    onUpdate(quest.id, { subtasks: next });
+  };
+
+  const removeSubtask = (quest: Quest, subId: string) => {
+    const list: SubTask[] = Array.isArray(quest.subtasks) ? quest.subtasks : [];
+    const next = list.filter((s) => s.id !== subId);
+    onUpdate(quest.id, { subtasks: next });
+  };
+
+  const addSubtask = (quest: Quest) => {
+    const text = subtaskDraft.trim();
+    if (!text) return;
+    const list: SubTask[] = Array.isArray(quest.subtasks) ? quest.subtasks : [];
+    const next: SubTask[] = [...list, { id: `${quest.id}-${Date.now()}`, text, done: false }];
+    onUpdate(quest.id, { subtasks: next });
+    setSubtaskDraft('');
+  };
+
+  const updateRecurrence = (quest: Quest, recurring: Recurrence) => {
+    onUpdate(quest.id, { recurring });
+  };
+
+  const updateBadge = (quest: Quest, badge: string) => {
+    onUpdate(quest.id, { badge });
   };
 
   return (
     <div className="space-y-5 animate-slide-up">
+
+      {/* ── Edit Quest Modal ─────────────────────────────────────────────── */}
+      {editQuest && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={closeEdit}
+        >
+          <div
+            className={`w-full max-w-2xl rounded-2xl shadow-2xl p-5 border ${
+              isHinglish
+                ? 'bg-white/90 border-rose-200/40'
+                : isDark
+                  ? 'bg-[#16162A] border-white/[0.08]'
+                  : 'bg-white border-slate-200/60'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className={`text-[14px] font-bold ${tp} flex items-center gap-2`}>
+                  <Pencil size={16} className={isHinglish ? 'text-rose-500' : 'text-indigo-400'} />
+                  Edit Quest
+                </div>
+                <div className={`text-[12px] mt-1 ${ts}`}>
+                  Update title, difficulty, category, due date, recurrence, badge, and checklist.
+                </div>
+              </div>
+              <button
+                onClick={closeEdit}
+                className={`p-2 rounded-xl transition-all ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-slate-100'}`}
+                aria-label="Close"
+              >
+                <X size={16} className={isDark ? 'text-slate-300' : 'text-slate-600'} />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              {/* Title */}
+              <div className="space-y-1">
+                <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Title</label>
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
+                  placeholder="Quest title"
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Difficulty */}
+                <div className="space-y-1">
+                  <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Difficulty</label>
+                  <div className="flex gap-1 flex-wrap">
+                    {(Object.keys(defaultDiffConfig) as Difficulty[]).map((d) => (
+                      <button
+                        key={d}
+                        onClick={() => setEditDifficulty(d)}
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
+                          editDifficulty === d
+                            ? `${isDark ? defaultDiffConfig[d].darkBg : defaultDiffConfig[d].bg} ${defaultDiffConfig[d].color} ring-1 ring-current/20`
+                            : isDark
+                              ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
+                              : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        {diffLabels[d]} (+{defaultDiffConfig[d].xp})
+                      </button>
+                    ))}
+                  </div>
+                  <div className={`text-[11px] mt-1 ${ts}`}>
+                    XP on completion: <span className="font-semibold">{defaultDiffConfig[editDifficulty].xp}</span> (before boosts)
+                    {editQuest.status === 'completed' && typeof editQuest.earnedXp === 'number' ? (
+                      <span className="ml-2">• Earned previously: <span className="font-semibold">{editQuest.earnedXp}</span></span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Category */}
+                <div className="space-y-1">
+                  <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Category</label>
+                  <input
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    list="kq-category-list"
+                    className={`w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                    placeholder="Karma / Vidya / Yoga…"
+                  />
+                  <datalist id="kq-category-list">
+                    {['Karma', 'Vidya', 'Yoga', 'Sadhana', 'Creative', 'Griha'].map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                </div>
+
+                {/* Due date */}
+                <div className="space-y-1">
+                  <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Due date</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                      className={`flex-1 px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                      style={{ colorScheme: isDark ? 'dark' : 'light' }}
+                    />
+                    <button
+                      onClick={() => setEditDueDate('')}
+                      className={`px-3 py-2 rounded-xl text-[12px] font-semibold ${
+                        isDark ? 'bg-white/[0.06] text-slate-200 hover:bg-white/[0.08]' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                      title="Clear due date"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* Recurrence */}
+                <div className="space-y-1">
+                  <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Recurrence</label>
+                  <select
+                    value={editRecurring}
+                    onChange={(e) => setEditRecurring(e.target.value as Recurrence)}
+                    className={`w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                  >
+                    <option value="none">{t('recurrenceNone', lang)}</option>
+                    <option value="daily">{t('recurrenceDaily', lang)}</option>
+                    <option value="weekly">{t('recurrenceWeekly', lang)}</option>
+                  </select>
+                </div>
+
+                {/* Badge */}
+                <div className="space-y-1">
+                  <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Title badge</label>
+                  <select
+                    value={editBadge}
+                    onChange={(e) => setEditBadge(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                  >
+                    {badgeOptions.map((b) => {
+                      const meta = titleBadgeMeta(b);
+                      const label = b === 'none' ? 'None' : `${meta.emoji} ${meta.label}`;
+                      return (
+                        <option key={b} value={b}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Checklist */}
+              <div className="space-y-2">
+                <div className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('checklistLabel', lang)}</div>
+                <div className="space-y-2">
+                  {editSubtasks.map((s) => (
+                    <div key={s.id} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
+                      <input
+                        type="checkbox"
+                        checked={!!s.done}
+                        onChange={() => toggleEditSubtaskDone(s.id)}
+                        className="accent-indigo-500"
+                      />
+                      <input
+                        value={s.text}
+                        onChange={(e) => updateEditSubtaskText(s.id, e.target.value)}
+                        className={`flex-1 px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                        placeholder="Checklist item"
+                      />
+                      <button
+                        onClick={() => removeEditSubtask(s.id)}
+                        className={`text-[12px] px-2 py-2 rounded-xl ${isDark ? 'text-slate-300 hover:bg-white/[0.06]' : 'text-slate-600 hover:bg-slate-100'}`}
+                        title="Remove"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={editSubtaskText}
+                      onChange={(e) => setEditSubtaskText(e.target.value)}
+                      placeholder={t('addSubtaskPlaceholder', lang)}
+                      className={`flex-1 px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                      onKeyDown={(e) => e.key === 'Enter' && addEditSubtask()}
+                    />
+                    <button
+                      onClick={addEditSubtask}
+                      className={`px-3 py-2 rounded-xl text-[12px] font-semibold text-white ${btnGradient}`}
+                    >
+                      <Plus size={14} className="inline -mt-[2px]" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={closeEdit}
+                className={`px-4 py-2 rounded-xl text-[12px] font-semibold ${
+                  isHinglish
+                    ? 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/15'
+                    : isDark
+                      ? 'bg-white/[0.06] text-slate-200 hover:bg-white/[0.08]'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={!editTitle.trim()}
+                className={`px-4 py-2 rounded-xl text-[12px] font-semibold text-white transition-all ${btnGradient} ${
+                  !editTitle.trim() ? 'opacity-60 cursor-not-allowed' : 'hover:shadow-md'
+                }`}
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -359,8 +777,7 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
               {/* ── Due Date Picker (NEW) ───────────────────────────────────
                    Replaces the hardcoded "Today" string.
                    - Uses <input type="date"> for native browser date picker
-                   - min is today so users can't accidentally set dates in the past
-                     (they still can if they want, but default prevents it)
+                   - allows past dates (retroactive logging)
                    - Shows the CalendarDays icon as a prefix hint
               ──────────────────────────────────────────────────────────────── */}
               <div className="space-y-1">
@@ -372,7 +789,6 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
                   type="date"
                   value={newDueDate}
                   onChange={e => setNewDueDate(e.target.value)}
-                  min={todayISO()} // default min = today; does not block past dates if user edits manually
                   className={`px-3 py-1.5 rounded-lg text-[11px] border focus:outline-none focus:ring-2 cursor-pointer ${inputCls}`}
                   style={{
                     // Force the date input text to match the surrounding UI
@@ -380,6 +796,127 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
                   }}
                 />
               </div>
+            </div>
+
+            {/* ── Power Fields (Recurring / Badge / Checklist) ─────────────── */}
+            <div className={`rounded-xl border p-3 ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : isHinglish ? 'bg-rose-50/60 border-rose-200/40' : 'bg-slate-50/70 border-slate-200/50'}`}>
+              <button
+                type="button"
+                onClick={() => setShowPowerFields(v => !v)}
+                className={`w-full flex items-center justify-between gap-2 text-left text-[12px] font-semibold ${tp}`}
+              >
+                <span className="flex items-center gap-2">
+                  <Star size={14} className={isHinglish ? 'text-rose-400' : 'text-indigo-400'} />
+                  {isHinglish ? 'Power Options' : (lang === 'hi' ? 'Power Options' : 'Power Options')}
+                </span>
+                <span className={`text-[11px] font-medium ${ts}`}>
+                  {showPowerFields ? (isHinglish ? 'Hide' : (lang === 'hi' ? 'छुपाएँ' : 'Hide')) : (isHinglish ? 'Show' : (lang === 'hi' ? 'दिखाएँ' : 'Show'))}
+                </span>
+              </button>
+
+              {showPowerFields && (
+                <div className="mt-3 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Recurring */}
+                    <div className="space-y-1">
+                      <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {t('recurringLabel', lang)}
+                      </label>
+                      <select
+                        value={newRecurring}
+                        onChange={(e) => setNewRecurring(e.target.value as Recurrence)}
+                        className={`w-full px-3 py-2 rounded-lg text-[12px] border focus:outline-none focus:ring-2 ${inputCls}`}
+                      >
+                        <option value="none">{t('recurrenceNone', lang)}</option>
+                        <option value="daily">{t('recurrenceDaily', lang)}</option>
+                        <option value="weekly">{t('recurrenceWeekly', lang)}</option>
+                      </select>
+                    </div>
+
+                    {/* Badge */}
+                    <div className="space-y-1">
+                      <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {t('badgeLabel', lang)}
+                      </label>
+                      <select
+                        value={newBadge}
+                        onChange={(e) => setNewBadge(e.target.value)}
+                        className={`w-full px-3 py-2 rounded-lg text-[12px] border focus:outline-none focus:ring-2 ${inputCls}`}
+                      >
+                        {badgeOptions.map((b) => {
+                          const meta = titleBadgeMeta(b);
+                          return (
+                            <option key={b} value={b}>
+                              {meta.emoji} {meta.label}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <div className="mt-1">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] ${titleBadgePillClass(newBadge, theme)}`}>
+                          {titleBadgeMeta(newBadge).emoji} {titleBadgeMeta(newBadge).label}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Checklist */}
+                  <div className="space-y-2">
+                    <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {t('checklistLabel', lang)}
+                    </label>
+
+                    {newSubtasks.length > 0 && (
+                      <div className={`rounded-xl border p-2 ${isDark ? 'border-white/[0.06] bg-white/[0.02]' : 'border-slate-200/50 bg-white/60'}`}>
+                        <div className="space-y-1.5">
+                          {newSubtasks.map((s) => (
+                            <div key={s.id} className="flex items-center justify-between gap-2">
+                              <div className={`text-[12px] ${tp} flex items-center gap-2`}>
+                                <span className={`h-4 w-4 rounded border flex items-center justify-center ${isDark ? 'border-white/10' : 'border-slate-300/60'}`}>
+                                  <Check size={12} className={isDark ? 'text-slate-600' : 'text-slate-400'} />
+                                </span>
+                                <span>{s.text}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeNewSubtask(s.id)}
+                                className={`text-[11px] px-2 py-1 rounded-lg ${isDark ? 'text-slate-400 hover:bg-white/[0.04]' : 'text-slate-500 hover:bg-slate-100'}`}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newSubtaskText}
+                        onChange={(e) => setNewSubtaskText(e.target.value)}
+                        placeholder={isHinglish ? 'Add checklist item…' : (lang === 'hi' ? 'Checklist item जोड़ें…' : 'Add checklist item…')}
+                        className={`flex-1 px-3.5 py-2 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
+                        onKeyDown={(e) => e.key === 'Enter' && addNewSubtask()}
+                      />
+                      <button
+                        type="button"
+                        onClick={addNewSubtask}
+                        className={`px-3.5 py-2 rounded-xl text-[12px] font-semibold text-white shadow-sm ${btnGradient}`}
+                      >
+                        {isHinglish ? 'Add' : (lang === 'hi' ? 'जोड़ें' : 'Add')}
+                      </button>
+                    </div>
+                    <p className={`text-[11px] ${ts}`}>
+                      {isHinglish
+                        ? 'Tip: Daily habit? Set Recurring → Daily + add checklist.'
+                        : (lang === 'hi'
+                          ? 'Tip: Daily habit के लिए Recurring → Daily चुनें और checklist जोड़ें।'
+                          : 'Tip: For a daily habit, set Recurring → Daily and add a checklist.')}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Actions */}
@@ -537,10 +1074,17 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
             const { isOverdue, isDueToday } = parseDueDate(quest.dueDate);
             const showOverdue = isOverdue && quest.status === 'active';
             const showDueToday = isDueToday && quest.status === 'active';
+	            const isExpanded = expandedId === quest.id;
+	            const focusOnThis = !!focusSession && focusSession.questId === quest.id;
+	            const focusOther = !!focusSession && focusSession.questId !== quest.id;
+	            const focusRemaining = focusOnThis ? Math.max(0, focusSession!.endsAt - focusNowMs) : 0;
+	            const badgeId = (quest.badge || 'none') as string;
+	            const badge = titleBadgeMeta(badgeId);
 
             return (
               <div
                 key={quest.id}
+	                id={`quest-${quest.id}`}
                 className={[
                   card,
                   'rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md',
@@ -553,7 +1097,7 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
                 ].filter(Boolean).join(' ')}
                 style={{ animationDelay: `${index * 40}ms` }}
               >
-                <div className="flex flex-wrap items-center gap-3.5">
+	                <div className="flex flex-wrap items-center gap-3.5">
                   {/* Completion button */}
                   <button
                     onClick={() => quest.status === 'active' && handleComplete(quest.id)}
@@ -623,6 +1167,23 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
                         {diffLabels[quest.difficulty]}
                       </span>
 
+	                      {/* Recurring pill */}
+	                      {quest.recurring && quest.recurring !== 'none' && (
+	                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+	                          isHinglish ? 'bg-rose-50 text-rose-700' : isDark ? 'bg-white/[0.04] text-slate-300' : 'bg-slate-50 text-slate-700'
+	                        }`}>
+	                          {quest.recurring === 'daily' ? t('recurrenceDaily', lang) : t('recurrenceWeekly', lang)}
+	                        </span>
+	                      )}
+
+	                      {/* Badge pill */}
+	                      {badgeId !== 'none' && (
+	                        <span className={titleBadgePillClass(badgeId, theme)}>
+	                          <span>{badge.emoji}</span>
+	                          <span>{badge.label}</span>
+	                        </span>
+	                      )}
+
                       {/* Due date — uses the DueDateBadge component */}
                       <DueDateBadge
                         dueDate={quest.dueDate}
@@ -638,6 +1199,15 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
                       }`}>
                         {quest.category}
                       </span>
+
+	                      {/* Focus status */}
+	                      {focusOnThis && quest.status === 'active' && (
+	                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+	                          isHinglish ? 'bg-rose-100 text-rose-700' : isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'
+	                        }`}>
+	                          {t('focusInProgress', lang)} • {formatMs(focusRemaining)}
+	                        </span>
+	                      )}
                     </div>
                   </div>
 
@@ -654,7 +1224,145 @@ export function QuestBoard({ quests, onComplete, onAdd }: QuestBoardProps) {
                       +{quest.xpReward}
                     </span>
                   </div>
+
+	                  {/* Actions: Focus + Details */}
+	                  <div className="flex items-center gap-2 shrink-0">
+	                    {quest.status === 'active' && (
+	                      focusOnThis ? (
+	                        <button
+	                          onClick={() => onStopFocus()}
+	                          className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
+	                            isHinglish
+	                              ? 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/15'
+	                              : isDark
+	                                ? 'bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/20'
+	                                : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
+	                          }`}
+	                        >
+	                          {t('focusStop', lang)}
+	                        </button>
+	                      ) : (
+	                        <button
+	                          onClick={() => onStartFocus(quest.id)}
+	                          className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
+	                            focusOther
+	                              ? (isDark ? 'bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]' : 'bg-slate-50 text-slate-700 hover:bg-slate-100')
+	                              : (isHinglish ? 'bg-gradient-to-r from-rose-500 to-violet-500 text-white' : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white')
+	                          }`}
+	                        >
+	                          {focusOther ? 'Switch Focus' : t('focusStart', lang)}
+	                        </button>
+	                      )
+	                    )}
+	                    <button
+	                      onClick={() => openEdit(quest)}
+	                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+	                        isHinglish ? 'bg-white/60 hover:bg-white/80 border border-rose-200/30'
+	                        : isDark ? 'bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06]'
+	                        : 'bg-white hover:bg-slate-50 border border-slate-200/50'
+	                      }`}
+	                      aria-label="Edit quest"
+	                      title="Edit"
+	                    >
+	                      <Pencil size={16} className={isDark ? 'text-slate-400' : 'text-slate-600'} />
+	                    </button>
+	                    <button
+	                      onClick={() => toggleExpand(quest.id)}
+	                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+	                        isHinglish ? 'bg-white/60 hover:bg-white/80 border border-rose-200/30'
+	                        : isDark ? 'bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06]'
+	                        : 'bg-white hover:bg-slate-50 border border-slate-200/50'
+	                      }`}
+	                      aria-label="Quest details"
+	                      title="Details"
+	                    >
+	                      <List size={16} className={isDark ? 'text-slate-400' : 'text-slate-600'} />
+	                    </button>
+	                  </div>
                 </div>
+
+	                {/* Expanded details */}
+	                {isExpanded && (
+	                  <div className={`mt-3 pt-3 border-t ${isDark ? 'border-white/[0.06]' : 'border-slate-200/40'} space-y-3`}> 
+	                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+	                      <div>
+	                        <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('recurringLabel', lang)}</label>
+	                        <select
+	                          value={(quest.recurring || 'none') as string}
+	                          onChange={(e) => updateRecurrence(quest, e.target.value as Recurrence)}
+	                          className={`mt-1 w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+	                        >
+	                          <option value="none">{t('recurrenceNone', lang)}</option>
+	                          <option value="daily">{t('recurrenceDaily', lang)}</option>
+	                          <option value="weekly">{t('recurrenceWeekly', lang)}</option>
+	                        </select>
+	                      </div>
+	
+	                      <div>
+	                        <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('badgeLabel', lang)}</label>
+	                        <select
+	                          value={(quest.badge || 'none') as string}
+	                          onChange={(e) => updateBadge(quest, e.target.value)}
+	                          className={`mt-1 w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+	                        >
+	                          {badgeOptions.map((b) => {
+	                            const meta = titleBadgeMeta(b);
+	                            const label = b === 'none' ? 'None' : `${meta.emoji} ${meta.label}`;
+	                            return <option key={b} value={b}>{label}</option>;
+	                          })}
+	                        </select>
+	                      </div>
+	                    </div>
+
+	                    <div>
+	                      <div className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('checklistLabel', lang)}</div>
+	                      <div className="mt-2 space-y-2">
+	                        {(Array.isArray(quest.subtasks) ? quest.subtasks : []).map((s) => (
+	                          <div key={s.id} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
+	                            <input
+	                              type="checkbox"
+	                              checked={!!s.done}
+	                              disabled={quest.status === 'completed'}
+	                              onChange={() => toggleSubtask(quest, s.id)}
+	                              className="accent-indigo-500"
+	                            />
+	                            <div className={`flex-1 text-[12px] ${quest.status === 'completed' ? 'line-through opacity-70' : ''} ${tp}`}>{s.text}</div>
+	                            {quest.status !== 'completed' && (
+	                              <button
+	                                onClick={() => removeSubtask(quest, s.id)}
+	                                className={`text-[12px] px-2 py-1 rounded-lg ${isDark ? 'text-slate-400 hover:bg-white/[0.06]' : 'text-slate-500 hover:bg-slate-100'}`}
+	                                title="Remove"
+	                              >
+	                                ✕
+	                              </button>
+	                            )}
+	                          </div>
+	                        ))}
+
+	                        {quest.status !== 'completed' && (
+	                          <div className="flex items-center gap-2">
+	                            <input
+	                              value={subtaskDraft}
+	                              onChange={(e) => setSubtaskDraft(e.target.value)}
+	                              placeholder={t('addSubtaskPlaceholder', lang)}
+	                              className={`flex-1 px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+	                            />
+	                            <button
+	                              onClick={() => addSubtask(quest)}
+	                              className={`px-3 py-2 rounded-xl text-[12px] font-semibold text-white ${btnGradient}`}
+	                            >
+	                              <Plus size={14} className="inline -mt-[2px]" />
+	                            </button>
+	                          </div>
+	                        )}
+
+	                        {(Array.isArray(quest.subtasks) ? quest.subtasks : []).length === 0 && (
+	                          <div className={`text-[12px] ${ts}`}>—</div>
+	                        )}
+	                      </div>
+	                    </div>
+	                  </div>
+	                )}
               </div>
             );
           })}

@@ -3,9 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme, type ThemeMode } from '../context/ThemeContext';
 import { t } from '../i18n';
 import type { Note, Page, Quest, UserStats, FocusSession } from '../store';
-import { avatarFrameClass, boostRemainingMs, formatMs, isBoostActive, type AvatarFrameId, type XpBoost } from '../shop';
+import { boostRemainingMs, formatMs, isBoostActive, type AvatarFrameId, type XpBoost } from '../shop';
 import type { AppNotification, NotificationType } from '../notifications';
 import { formatRelativeTime } from '../notifications';
+import { UserMenu, type CloudBadgeStatus } from './UserMenu';
 
 interface TopNavProps {
   stats: UserStats;
@@ -35,6 +36,13 @@ interface TopNavProps {
   onNavigate: (page: Page) => void;
   onFocusQuest: (id: string) => void;
   onFocusNote: (id: string) => void;
+
+  /** Optional: show signed-in email + cloud sync badge in the user chip. */
+  authEmail?: string | null;
+  cloudStatus?: CloudBadgeStatus;
+  /** Optional: when in guest mode, open auth (sign in / sign up). */
+  onOpenAuth?: () => void;
+  onSignOut?: () => void;
 }
 
 const themeOptions: { mode: ThemeMode; icon: string; labelKey: 'themeLight' | 'themeDark' | 'themeHinglish'; desc: string; color: string }[] = [
@@ -329,6 +337,11 @@ export function TopNav({
   onNavigate,
   onFocusQuest,
   onFocusNote,
+
+  authEmail,
+  cloudStatus,
+  onOpenAuth,
+  onSignOut,
 }: TopNavProps) {
   const { theme, isDark, isHinglish, lang, setTheme } = useTheme();
 
@@ -594,18 +607,20 @@ export function TopNav({
           )}
         </div>
 
-        {/* Avatar */}
-        <button className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all border shrink-0 ${isDark ? 'border-transparent hover:border-white/[0.05] hover:bg-white/[0.03]' : 'border-transparent hover:border-slate-200/40 hover:bg-slate-50'}`}>
-          <div className={`w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center text-sm md:text-base shadow-sm ${
-            isHinglish ? 'bg-gradient-to-br from-rose-400 to-violet-400' : 'bg-gradient-to-br from-indigo-500 to-violet-500'
-          } ${avatarFrameClass(avatarFrame)}`}>
-            {stats.avatarEmoji}
-          </div>
-          <div className="text-left hidden xl:block">
-            <p className={`text-[13px] font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{stats.username}</p>
-            <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{isHinglish ? `Boss · Level ${stats.level}` : `Yoddha · Lvl ${stats.level}`}</p>
-          </div>
-        </button>
+        {/* User chip (responsive + professional dropdown) */}
+        <UserMenu
+          stats={stats}
+          avatarFrame={avatarFrame}
+          xpBoost={xpBoost}
+          theme={theme}
+          isDark={isDark}
+          isHinglish={isHinglish}
+          authEmail={authEmail}
+          cloudStatus={cloudStatus}
+          onOpenProfile={() => onNavigate('profile')}
+          onOpenAuth={onOpenAuth}
+          onSignOut={onSignOut}
+        />
       </div>
 
       {/* Mobile search expand */}

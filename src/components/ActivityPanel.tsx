@@ -7,7 +7,7 @@ import { useSupabaseActivityLog } from '../hooks/useSupabaseActivityLog';
 function prettyType(t: string) {
   return t
     .replaceAll('_', ' ')
-    .replace(/\b\w/g, (m) => m.toUpperCase());
+    .replace(/\b\w/g, (m: string) => m.toUpperCase());
 }
 
 function iconFor(eventType: string) {

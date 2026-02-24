@@ -18,8 +18,8 @@ import { MudraShop } from './components/MudraShop';
 import { ProfilePage } from './components/ProfilePage';
 import { LevelUpOverlay, type LevelUpData } from './components/LevelUpOverlay';
 import { t } from './i18n';
-import type { Page, Quest, Note, UserStats, Achievement, Recurrence, SubTask, FocusSession } from './store';
-import { defaultQuests, defaultNotes, defaultAchievements, todayISO, yesterdayISO } from './store';
+import type { Page, Quest, Note, NoteRevision, UserStats, Achievement, AchievementCriteria, Difficulty, Recurrence, SubTask, FocusSession, WeeklyReport } from './store';
+import { defaultQuests, defaultNotes, defaultAchievements, todayISO, yesterdayISO, noteColors, addDaysISO } from './store';
 import type { AppNotification } from './notifications';
 import { defaultNotifications, makeNotification } from './notifications';
 import { useMinWidth } from './hooks/useMinWidth';
@@ -37,6 +37,8 @@ import { weekEndFromWeekStart, weekStartFromISO, weekStartISO } from './utils/re
 import { sfx } from './sfx/sfx';
 import { questTemplates, type QuestTemplateId } from './templates/questTemplates';
 import { SupabaseTest } from "./components/SupabaseTest";
+import { logActivity } from './lib/activity';
+import { supabase } from './lib/supabase';
 
 // ── Particles ────────────────────────────────────────────────────────────────
 // Geometry is computed once (stable). Palette changes with theme.
@@ -167,6 +169,117 @@ function normalizeBoost(b: unknown): XpBoost | null {
   return { multiplier, expiresAt };
 }
 
+
+// ── Achievements: semantic unlocks (in addition to XP) ─────────────────────
+type AchievementEvalCtx = {
+  stats: UserStats;
+  quests: Quest[];
+  notes: Note[];
+  today: string;
+  totalXp: number;
+  lastQuestCompletedTs?: number;
+  lastNoteCreatedAt?: string;
+};
+
+function localHourFromEpoch(ts: number): number {
+  return new Date(ts).getHours();
+}
+
+function localHourFromISO(iso: string): number | null {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return new Date(t).getHours();
+}
+
+function countCompletedOnDay(quests: Quest[], dayISO: string): number {
+  return quests.filter((q) => q.status === 'completed' && (q.completedAt || '').trim() === dayISO).length;
+}
+
+function hasCompletedDifficulty(quests: Quest[], difficulty: Difficulty): boolean {
+  return quests.some((q) => q.status === 'completed' && q.difficulty === difficulty);
+}
+
+function shouldUnlockByCriteria(a: Achievement, ctx: AchievementEvalCtx): boolean {
+  const c: AchievementCriteria | undefined = (a as any).criteria;
+  if (!c) return false;
+
+  // Special achievement handled after the first pass.
+  if (c.requiresAllOtherAchievements) return false;
+
+  if (typeof c.minLevel === 'number' && ctx.stats.level < c.minLevel) return false;
+  if (typeof c.minStreak === 'number' && ctx.stats.streak < c.minStreak) return false;
+  if (typeof c.minStreakRecord === 'number' && (ctx.stats.streakRecord || 0) < c.minStreakRecord) return false;
+  if (typeof c.minQuestsCompleted === 'number' && (ctx.stats.questsCompleted || 0) < c.minQuestsCompleted) return false;
+  if (typeof c.minNotesCreated === 'number' && ctx.notes.length < c.minNotesCreated) return false;
+
+  if (typeof c.minQuestsCompletedInDay === 'number') {
+    const done = countCompletedOnDay(ctx.quests, ctx.today);
+    if (done < c.minQuestsCompletedInDay) return false;
+  }
+
+  if (c.anyCompletedDifficulty) {
+    if (!hasCompletedDifficulty(ctx.quests, c.anyCompletedDifficulty)) return false;
+  }
+
+  if (typeof c.questCompletedBeforeHour === 'number') {
+    const ts = ctx.lastQuestCompletedTs;
+    if (typeof ts !== 'number') return false;
+    const hour = localHourFromEpoch(ts);
+    if (hour >= c.questCompletedBeforeHour) return false;
+  }
+
+  if (typeof c.noteCreatedBeforeHour === 'number') {
+    const iso = ctx.lastNoteCreatedAt;
+    if (!iso) return false;
+    const hour = localHourFromISO(iso);
+    if (hour === null) return false;
+    if (hour >= c.noteCreatedBeforeHour) return false;
+  }
+
+  return true;
+}
+
+function unlockAchievementsWithContext(
+  achievements: Achievement[],
+  ctx: AchievementEvalCtx,
+  notify: (a: Achievement) => void
+): { next: Achievement[]; unlockedNow: Achievement[] } {
+  const unlockedNow: Achievement[] = [];
+
+  let next = achievements.map((a) => {
+    if (a.unlocked) return a;
+    const byXp = ctx.totalXp >= a.xpRequired;
+    const byCriteria = shouldUnlockByCriteria(a, ctx);
+    if (!byXp && !byCriteria) return a;
+
+    const unlocked = { ...a, unlocked: true };
+    unlockedNow.push(unlocked);
+    notify(unlocked);
+    return unlocked;
+  });
+
+  // Second pass: "Moksha" style achievement (unlock all)
+  const mokshaIdx = next.findIndex((a) => {
+    const c: AchievementCriteria | undefined = (a as any).criteria;
+    return !!c?.requiresAllOtherAchievements;
+  });
+
+  if (mokshaIdx >= 0) {
+    const moksha = next[mokshaIdx];
+    if (!moksha.unlocked) {
+      const othersUnlocked = next.every((a, i) => i === mokshaIdx || a.unlocked);
+      if (othersUnlocked) {
+        const unlocked = { ...moksha, unlocked: true };
+        next = next.map((a, i) => (i === mokshaIdx ? unlocked : a));
+        unlockedNow.push(unlocked);
+        notify(unlocked);
+      }
+    }
+  }
+
+  return { next, unlockedNow };
+}
+
 function applyRecurringResets(list: Quest[]): Quest[] {
   const today = todayISO();
   const currentWeek = weekStartISO();
@@ -216,6 +329,8 @@ function AppContent() {
   const themeUserOverrideRef = useRef(false);
   const { user, loading: authLoading, signOut } = useAuth();
   const [guestMode, setGuestMode] = useState(false);
+  const [guestBooting, setGuestBooting] = useState(false);
+  const guestHadStateRef = useRef(false);
 
   useEffect(() => {
     if (user) setGuestMode(false);
@@ -241,15 +356,30 @@ function AppContent() {
   const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
   const [focusSession, setFocusSession] = useState<FocusSession | null>(null);
   const [focusNow, setFocusNow] = useState(() => Date.now());
+  const focusRemainingMs = focusSession ? Math.max(0, focusSession.endsAt - focusNow) : 0;
 
-  const [quests, setQuests] = useState<Quest[]>(defaultQuests);
-  const [notes, setNotes] = useState<Note[]>(defaultNotes);
-  const [achievements, setAchievements] = useState<Achievement[]>(defaultAchievements);
-  const [xpPopup, setXpPopup] = useState<{ xp: number; kind: 'quest' | 'focus' } | null>(null);
-  const [notifications, setNotifications] = useState<AppNotification[]>(defaultNotifications);
-  const [levelUpData, setLevelUpData] = useState<LevelUpData | null>(null);
+  // Seed mode: keep the old "demo" starter progression available (for screenshots / demos),
+  // but default new users to a true fresh start (0 progress).
+  const seedMode = useMemo<'fresh' | 'demo'>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const seed = (params.get('seed') || '').toLowerCase();
+      if (seed === 'demo') return 'demo';
+      if (seed === 'fresh') return 'fresh';
+    } catch {
+      // ignore
+    }
+    try {
+      const stored = (localStorage.getItem('karmquest_seed_mode') || '').toLowerCase();
+      if (stored === 'demo') return 'demo';
+      if (stored === 'fresh') return 'fresh';
+    } catch {
+      // ignore
+    }
+    return 'fresh';
+  }, []);
 
-  const defaultStats: UserStats = {
+  const demoStats = useMemo<UserStats>(() => ({
     level: 5,
     xp: 320,
     xpToNext: 500,
@@ -263,11 +393,57 @@ function AppContent() {
     totalQuests: 63,
     avatarEmoji: '🧘',
     username: 'Yoddha',
-  };
+  }), []);
+
+  const freshStats = useMemo<UserStats>(() => ({
+    level: 1,
+    xp: 0,
+    xpToNext: 100,
+    totalXpEarned: 0,
+    coins: 0,
+    streak: 0,
+    streakRecord: 0,
+    lastActiveDate: '',
+    lastDailyChallengeNotified: '',
+    questsCompleted: 0,
+    totalQuests: defaultQuests.length,
+    avatarEmoji: '🧘',
+    username: 'Yoddha',
+  }), []);
+
+  // Always use fresh defaults for migrations (so missing fields don't resurrect demo values).
+  const statsDefaults = freshStats;
+  const defaultStats: UserStats = seedMode === 'demo' ? demoStats : freshStats;
+
+  const initialQuests = useMemo<Quest[]>(() => {
+    if (seedMode === 'demo') return defaultQuests;
+    // Fresh start: keep the starter quest templates, but remove any seeded completions.
+    return defaultQuests.map((q) => ({
+      ...q,
+      status: 'active' as const,
+      completedAt: '',
+      completedAtTs: undefined,
+      earnedXp: undefined,
+      subtasks: resetSubtasks(q.subtasks),
+    }));
+  }, [seedMode]);
+
+  const initialAchievements = useMemo<Achievement[]>(() => {
+    if (seedMode === 'demo') return defaultAchievements;
+    return defaultAchievements.map((a) => ({ ...a, unlocked: false }));
+  }, [seedMode]);
+
+  const [quests, setQuests] = useState<Quest[]>(initialQuests);
+  const [notes, setNotes] = useState<Note[]>(defaultNotes);
+  const [achievements, setAchievements] = useState<Achievement[]>(initialAchievements);
+  const [xpPopup, setXpPopup] = useState<{ xp: number; kind: 'quest' | 'focus' } | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>(defaultNotifications);
+  const [levelUpData, setLevelUpData] = useState<LevelUpData | null>(null);
 
   const [stats, setStats] = useState<UserStats>(defaultStats);
   const [shop, setShop] = useState<ShopState>(defaultShopState);
   const [sfxEnabled, setSfxEnabled] = useState<boolean>(true);
+  const [bootReady, setBootReady] = useState(false);
 
   // ── Challenges state (progress + claimed rewards) ──────────────────────
 type ChallengeState = {
@@ -295,6 +471,29 @@ const defaultChallengeState: ChallengeState = useMemo(() => ({
 
 const [challengeState, setChallengeState] = useState<ChallengeState>(defaultChallengeState);
 
+  // Notes: normalize createdAt to ISO so Supabase (timestamptz) can store it reliably.
+  const normalizeNoteCreatedAt = useCallback((v: unknown): string => {
+    if (typeof v !== 'string') return new Date().toISOString();
+    const s = v.trim();
+    if (!s) return new Date().toISOString();
+    const parsed = Date.parse(s);
+    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+
+    const lower = s.toLowerCase();
+    if (lower === 'just now') return new Date().toISOString();
+    if (lower === 'yesterday') return new Date(Date.now() - 86_400_000).toISOString();
+
+    const m = lower.match(/^(\d+)\s*(m|min|mins|minute|minutes)\s*ago$/);
+    if (m) return new Date(Date.now() - Number(m[1]) * 60_000).toISOString();
+    const h = lower.match(/^(\d+)\s*(h|hr|hrs|hour|hours)\s*ago$/);
+    if (h) return new Date(Date.now() - Number(h[1]) * 3_600_000).toISOString();
+    const d = lower.match(/^(\d+)\s*(d|day|days)\s*ago$/);
+    if (d) return new Date(Date.now() - Number(d[1]) * 86_400_000).toISOString();
+
+    // Unknown human string: fall back to "now" (keeps app stable + backend-friendly).
+    return new Date().toISOString();
+  }, []);
+
 const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<string>) => {
   const next = { ...(claimed || {}) };
   ids.forEach((id) => { delete next[id]; });
@@ -321,6 +520,333 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
 
   const persistVersion = '1.3.0';
   const persistKey = userId ? `karmquest_state:${userId}` : guestMode ? 'karmquest_state:guest' : 'karmquest_state:anon';
+
+  // Completion history (additive): used by the Habit Heatmap to show true daily density,
+  // especially for recurring habits (multiple completions over many days).
+  const completionLogKey = useMemo(
+    () => (userId ? `karmquest_completion_log_v1:${userId}` : guestMode ? 'karmquest_completion_log_v1:guest' : 'karmquest_completion_log_v1:anon'),
+    [userId, guestMode]
+  );
+
+  // Weekly report cards (shareable): generated locally from completion history.
+  const weeklyReportsKey = useMemo(
+    () => (userId ? `karmquest_weekly_reports_v1:${userId}` : guestMode ? 'karmquest_weekly_reports_v1:guest' : 'karmquest_weekly_reports_v1:anon'),
+    [userId, guestMode]
+  );
+
+  type CompletionEvent = {
+    ts: number; // epoch ms
+    day: string; // YYYY-MM-DD
+    questId: string;
+    title: string;
+    category: string;
+    difficulty: Difficulty;
+    xp: number;
+    coins: number;
+  };
+
+  const appendCompletionLog = useCallback(
+    (ev: CompletionEvent) => {
+      try {
+        const raw = localStorage.getItem(completionLogKey);
+        const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+        const arr: CompletionEvent[] = Array.isArray(parsed) ? (parsed as any[]) : [];
+        const safe = arr
+          .filter(Boolean)
+          .map((x: any) => ({
+            ts: typeof x.ts === 'number' ? x.ts : Date.now(),
+            day: typeof x.day === 'string' ? x.day : todayISO(),
+            questId: typeof x.questId === 'string' ? x.questId : '',
+            title: typeof x.title === 'string' ? x.title : '',
+            category: typeof x.category === 'string' ? x.category : 'Karma',
+            difficulty: (typeof x.difficulty === 'string' ? x.difficulty : 'easy') as Difficulty,
+            xp: typeof x.xp === 'number' ? x.xp : 0,
+            coins: typeof x.coins === 'number' ? x.coins : 0,
+          }))
+          .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.day) && x.questId);
+
+        safe.push(ev);
+        // Keep enough for long usage; still tiny in localStorage.
+        const trimmed = safe.slice(-2000);
+        localStorage.setItem(completionLogKey, JSON.stringify(trimmed));
+      } catch {
+        // ignore storage errors
+      }
+
+      // Best-effort cloud log (no-op for guests). Never blocks.
+      void logActivity({
+        eventType: 'quest_complete',
+        entityType: 'quest',
+        entityId: ev.questId,
+        payload: {
+          day: ev.day,
+          ts: ev.ts,
+          title: ev.title,
+          xp: ev.xp,
+          coins: ev.coins,
+          category: ev.category,
+          difficulty: ev.difficulty,
+        },
+      });
+    },
+    [completionLogKey]
+  );
+
+  // ── Social leaderboard: XP event logging (offline-safe) ────────────────
+  // The weekly Friends leaderboard uses server-side `xp_events` rows.
+  // We log XP events on quest completion / focus bonus when the user is authenticated.
+  type XpEventOp = {
+    xp: number;
+    source: string;
+    meta: Record<string, unknown>;
+    ts: number; // epoch ms
+  };
+
+  const xpEventQueueKey = useMemo(() => (userId ? `karmquest_xp_event_queue_v1:${userId}` : null), [userId]);
+  const [xpQueueCount, setXpQueueCount] = useState<number>(0);
+
+  const readXpQueue = useCallback((): XpEventOp[] => {
+    if (!xpEventQueueKey) return [];
+    try {
+      const raw = localStorage.getItem(xpEventQueueKey);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      if (!Array.isArray(parsed)) return [];
+      return (parsed as any[])
+        .filter(Boolean)
+        .map((x: any) => ({
+          xp: typeof x.xp === 'number' ? x.xp : 0,
+          source: typeof x.source === 'string' ? x.source : 'quest_complete',
+          meta: (x.meta && typeof x.meta === 'object' ? (x.meta as Record<string, unknown>) : {}),
+          ts: typeof x.ts === 'number' ? x.ts : Date.now(),
+        }))
+        .filter((x) => x.xp >= 0)
+        .slice(-400);
+    } catch {
+      return [];
+    }
+  }, [xpEventQueueKey]);
+
+  const writeXpQueue = useCallback(
+    (ops: XpEventOp[]) => {
+      if (!xpEventQueueKey) return;
+      try {
+        localStorage.setItem(xpEventQueueKey, JSON.stringify(ops.slice(-400)));
+      } catch {
+        // ignore storage errors
+      }
+      setXpQueueCount(ops.length);
+    },
+    [xpEventQueueKey]
+  );
+
+  useEffect(() => {
+    // keep count in sync on login/logout
+    setXpQueueCount(readXpQueue().length);
+  }, [readXpQueue]);
+
+  const enqueueXpEvent = useCallback(
+    (op: XpEventOp) => {
+      if (!xpEventQueueKey) return;
+      const next = [...readXpQueue(), op].slice(-400);
+      writeXpQueue(next);
+    },
+    [readXpQueue, writeXpQueue, xpEventQueueKey]
+  );
+
+  const flushXpQueue = useCallback(async () => {
+    if (!userId || !xpEventQueueKey) return { flushed: 0, remaining: 0 };
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return { flushed: 0, remaining: xpQueueCount };
+
+    const ops = readXpQueue();
+    if (ops.length === 0) return { flushed: 0, remaining: 0 };
+
+    const remaining: XpEventOp[] = [];
+    let flushed = 0;
+
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      try {
+        const { error } = await supabase.rpc('log_xp_event', {
+          p_xp: op.xp,
+          p_source: op.source,
+          p_meta: op.meta ?? {},
+        });
+        if (error) throw error;
+        flushed++;
+      } catch {
+        // stop early (likely auth/session/offline). keep the rest.
+        remaining.push(...ops.slice(i));
+        break;
+      }
+    }
+
+    if (remaining.length !== ops.length) writeXpQueue(remaining);
+    return { flushed, remaining: remaining.length };
+  }, [userId, xpEventQueueKey, readXpQueue, writeXpQueue, xpQueueCount]);
+
+  const logXpEventWithQueue = useCallback(
+    async (xp: number, source: string, meta: Record<string, unknown>) => {
+      if (!userId) return; // guests don't write to Supabase
+      try {
+        const { error } = await supabase.rpc('log_xp_event', { p_xp: xp, p_source: source, p_meta: meta ?? {} });
+        if (error) throw error;
+      } catch {
+        enqueueXpEvent({ xp, source, meta: meta ?? {}, ts: Date.now() });
+      }
+    },
+    [enqueueXpEvent, userId]
+  );
+
+  // Flush XP queue on login + when the browser comes online
+  useEffect(() => {
+    if (!userId) return;
+    void flushXpQueue();
+  }, [userId, flushXpQueue]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      if (!userId) return;
+      void flushXpQueue();
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [flushXpQueue, userId]);
+
+
+
+  // ── Weekly report cards (shareable) ────────────────────────────────────
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
+  const [weeklyReportAutoOpen, setWeeklyReportAutoOpen] = useState(false);
+
+  const readWeeklyReports = useCallback((): WeeklyReport[] => {
+    try {
+      const raw = localStorage.getItem(weeklyReportsKey);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      if (!Array.isArray(parsed)) return [];
+      return (parsed as any[])
+        .filter(Boolean)
+        .map((r: any, idx: number) => ({
+          id: typeof r.id === 'string' ? r.id : `${Date.now()}-${idx}`,
+          weekStart: typeof r.weekStart === 'string' ? r.weekStart : '',
+          weekEnd: typeof r.weekEnd === 'string' ? r.weekEnd : '',
+          generatedAt: typeof r.generatedAt === 'string' ? r.generatedAt : new Date().toISOString(),
+          questsCompleted: typeof r.questsCompleted === 'number' ? r.questsCompleted : 0,
+          xpEarned: typeof r.xpEarned === 'number' ? r.xpEarned : 0,
+          coinsEarned: typeof r.coinsEarned === 'number' ? r.coinsEarned : 0,
+          streakDays: typeof r.streakDays === 'number' ? r.streakDays : 0,
+          username: typeof r.username === 'string' ? r.username : (stats.username || 'Yoddha'),
+          avatarEmoji: typeof r.avatarEmoji === 'string' ? r.avatarEmoji : (stats.avatarEmoji || '🧘'),
+          dismissedAt: typeof r.dismissedAt === 'string' ? r.dismissedAt : undefined,
+        }))
+        .filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.weekStart) && /^\d{4}-\d{2}-\d{2}$/.test(r.weekEnd))
+        .slice(-26);
+    } catch {
+      return [];
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weeklyReportsKey, stats.username, stats.avatarEmoji]);
+
+  useEffect(() => {
+    setWeeklyReports(readWeeklyReports());
+  }, [readWeeklyReports]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(weeklyReportsKey, JSON.stringify(weeklyReports.slice(-26)));
+    } catch {
+      // ignore
+    }
+  }, [weeklyReportsKey, weeklyReports]);
+
+  const computeWeeklyReport = useCallback(
+    (weekStart: string): WeeklyReport => {
+      const weekEnd = weekEndFromWeekStart(weekStart);
+      // Prefer completion history log (accurate for recurring habits)
+      let events: CompletionEvent[] = [];
+      try {
+        const raw = localStorage.getItem(completionLogKey);
+        const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+        if (Array.isArray(parsed)) events = parsed as any as CompletionEvent[];
+      } catch {
+        // ignore
+      }
+      const inWeek = (d: string) => d >= weekStart && d <= weekEnd;
+      const weekEvents = (events || []).filter((e: any) => e && typeof e.day === 'string' && inWeek(e.day));
+      const fromEvents = {
+        questsCompleted: weekEvents.length,
+        xpEarned: weekEvents.reduce((a, e: any) => a + (typeof e.xp === 'number' ? e.xp : 0), 0),
+        coinsEarned: weekEvents.reduce((a, e: any) => a + (typeof e.coins === 'number' ? e.coins : 0), 0),
+      };
+
+      // Fallback for older data (before completion log existed)
+      if (fromEvents.questsCompleted === 0) {
+        const done = quests.filter((q) => q.status === 'completed' && q.completedAt && inWeek(q.completedAt));
+        fromEvents.questsCompleted = done.length;
+        fromEvents.xpEarned = done.reduce((a, q) => a + (typeof (q as any).earnedXp === 'number' ? (q as any).earnedXp : q.xpReward || 0), 0);
+        fromEvents.coinsEarned = done.reduce((a, q) => a + (typeof (q as any).earnedCoins === 'number' ? (q as any).earnedCoins : 0), 0);
+      }
+
+      return {
+        id: `wr-${weekStart}-${Date.now()}`,
+        weekStart,
+        weekEnd,
+        generatedAt: new Date().toISOString(),
+        questsCompleted: fromEvents.questsCompleted,
+        xpEarned: fromEvents.xpEarned,
+        coinsEarned: fromEvents.coinsEarned,
+        streakDays: stats.streak || 0,
+        username: stats.username || 'Yoddha',
+        avatarEmoji: stats.avatarEmoji || '🧘',
+      };
+    },
+    [completionLogKey, quests, stats.avatarEmoji, stats.streak, stats.username]
+  );
+
+  const upsertWeeklyReport = useCallback((r: WeeklyReport) => {
+    setWeeklyReports((prev) => {
+      const filtered = (prev || []).filter((x) => x.weekStart !== r.weekStart);
+      const next = [...filtered, r].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+      return next.slice(-26);
+    });
+  }, []);
+
+  const getTargetWeekStartForReport = useCallback((): string => {
+    const params = new URLSearchParams(window.location.search);
+    const force = params.get('forceWeeklyReport') === '1';
+    const now = new Date();
+    const isSunday = now.getDay() === 0;
+    const current = weekStartISO(now);
+    // On Sunday -> generate for the week ending today; on other days -> last completed week.
+    if (isSunday || force) return current;
+    return addDaysISO(current, -7);
+  }, []);
+
+  const maybeGenerateWeeklyReport = useCallback(() => {
+    const targetWeekStart = getTargetWeekStartForReport();
+    if (!targetWeekStart) return;
+
+    const existing = weeklyReports.find((r) => r.weekStart === targetWeekStart);
+    if (existing) return;
+
+    const r = computeWeeklyReport(targetWeekStart);
+    upsertWeeklyReport(r);
+    // Auto-open the share modal for fresh reports (once)
+    setWeeklyReportAutoOpen(true);
+  }, [computeWeeklyReport, getTargetWeekStartForReport, upsertWeeklyReport, weeklyReports]);
+
+  const handleDismissWeeklyReport = useCallback((weekStart: string) => {
+    setWeeklyReports((prev) =>
+      (prev || []).map((r) => (r.weekStart === weekStart ? { ...r, dismissedAt: new Date().toISOString() } : r))
+    );
+  }, []);
+
+  const activeWeeklyReport = useMemo(() => {
+    const targetWeekStart = getTargetWeekStartForReport();
+    const r = weeklyReports.find((x) => x.weekStart === targetWeekStart);
+    if (!r) return null;
+    if (r.dismissedAt) return null;
+    return r;
+  }, [getTargetWeekStartForReport, weeklyReports]);
 
   const persistSnapshot: PersistedSnapshot = {
     quests,
@@ -368,7 +894,34 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
       );
     }
     
-    if (Array.isArray(s.notes)) setNotes(s.notes);
+    if (Array.isArray(s.notes)) {
+      setNotes(
+        (s.notes as any[]).filter(Boolean).map((n: any, idx: number) => ({
+          id: typeof n.id === 'string' ? n.id : `${Date.now()}-${idx}`,
+          title: String(n.title || ''),
+          content: String(n.content || ''),
+          tags: Array.isArray(n.tags) ? n.tags.map((x: any) => String(x)).filter(Boolean) : [],
+          color: typeof n.color === 'string' ? n.color : (noteColors[0] || '#6366F1'),
+          createdAt: normalizeNoteCreatedAt(n.createdAt),
+
+          updatedAt: n.updatedAt ? normalizeNoteCreatedAt(n.updatedAt) : undefined,
+          revisions: Array.isArray(n.revisions)
+            ? n.revisions
+                .filter(Boolean)
+                .map((r: any) => ({
+                  editedAt: normalizeNoteCreatedAt(r.editedAt),
+                  title: String(r.title || ''),
+                  content: String(r.content || ''),
+                  tags: Array.isArray(r.tags) ? r.tags.map((x: any) => String(x)).filter(Boolean) : [],
+                  color: typeof r.color === 'string' ? r.color : (noteColors[0] || '#6366F1'),
+                  emoji: typeof r.emoji === 'string' ? r.emoji : '📜',
+                }))
+                .slice(0, 25)
+            : undefined,
+          emoji: typeof n.emoji === 'string' ? n.emoji : '📜',
+        }))
+      );
+    }
     if (Array.isArray(s.achievements)) setAchievements(s.achievements);
     if (Array.isArray(s.notifications)) setNotifications(s.notifications);
     
@@ -396,17 +949,17 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
     if (s.stats && typeof s.stats === 'object') {
       const stAny = s.stats as Partial<UserStats> & Record<string, unknown>;
       const migrated: UserStats = {
-        ...defaultStats,
+        ...statsDefaults,
         ...stAny,
         totalXpEarned:
           typeof stAny.totalXpEarned === 'number'
             ? stAny.totalXpEarned
             : typeof stAny.xp === 'number'
               ? stAny.xp
-              : defaultStats.totalXpEarned,
+              : statsDefaults.totalXpEarned,
         streakRecord: typeof (stAny as any).streakRecord === 'number'
           ? (stAny as any).streakRecord
-          : (typeof stAny.streak === 'number' ? stAny.streak : defaultStats.streakRecord),
+          : (typeof stAny.streak === 'number' ? stAny.streak : statsDefaults.streakRecord),
         lastDailyChallengeNotified: typeof stAny.lastDailyChallengeNotified === 'string' ? stAny.lastDailyChallengeNotified : '',
       };
       setStats(migrated);
@@ -450,7 +1003,7 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
     } else {
       setFocusSession(null);
     }
-  }, [defaultChallengeState, stripClaimed, DAILY_CHALLENGE_IDS, WEEKLY_CHALLENGE_IDS]);
+  }, [defaultChallengeState, stripClaimed, DAILY_CHALLENGE_IDS, WEEKLY_CHALLENGE_IDS, normalizeNoteCreatedAt, statsDefaults]);
 
   const { hydrated } = useAppPersistence<PersistedSnapshot>({
     key: persistKey,
@@ -458,6 +1011,56 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
     snapshot: persistSnapshot,
     restore: restoreSnapshot,
   });
+
+  // Guest bootstrap:
+  // We always start Guest fresh (no persistence across guest sessions).
+  // This prevents "anon" state from leaking into guest and guarantees a 0-day streak every time.
+  useEffect(() => {
+    if (!guestMode || userId) return;
+    if (!guestBooting) return;
+    if (!hydrated) return;
+      // Fresh guest profile (local-only)
+      setStats({
+        level: 1,
+        xp: 0,
+        xpToNext: 100,
+        totalXpEarned: 0,
+        coins: 0,
+        streak: 0,
+        streakRecord: 0,
+        lastActiveDate: '',
+        lastDailyChallengeNotified: '',
+        questsCompleted: 0,
+        totalQuests: defaultQuests.length,
+        avatarEmoji: '🧘',
+        username: 'Guest',
+      });
+
+      // Sample quests, but start them as "active" (no retroactive completions).
+      setQuests(
+        defaultQuests.map((q) => ({
+          ...q,
+          status: 'active',
+          completedAt: '',
+          earnedXp: undefined,
+          subtasks: resetSubtasks(q.subtasks),
+        }))
+      );
+
+      // Optional onboarding content
+      setNotes(defaultNotes);
+      // Keep achievements available but start locked for a true fresh guest session.
+      setAchievements(defaultAchievements.map((a) => ({ ...a, unlocked: false })));
+
+      setShop(defaultShopState);
+      setNotifications([]);
+      setFocusSession(null);
+      setChallengeState(defaultChallengeState);
+      setCurrentPage('dashboard');
+
+    setGuestBooting(false);
+  }, [guestMode, userId, guestBooting, hydrated, defaultChallengeState]);
+
 
   const cloud = useSupabaseUserState<PersistedSnapshot>({
     enabled: !!userId && hydrated,
@@ -579,10 +1182,24 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
     if (isMdUp) setMobileOpen(false);
   }, [isMdUp]);
 
+
+  // Defer boot checks by 1 tick so restoreSnapshot state updates land before we run
+  // recurring resets / streak checks. Also re-run when switching storage key (anon ↔ guest ↔ user).
+  useEffect(() => {
+    if (!hydrated) return;
+    setBootReady(false);
+    const t = window.setTimeout(() => setBootReady(true), 0);
+    return () => window.clearTimeout(t);
+  }, [hydrated, persistKey]);
+
   // ── Boot checks after hydration ─────────────────────────────────────────
   const bootCheckedRef = useRef(false);
   useEffect(() => {
-    if (!hydrated) return;
+    bootCheckedRef.current = false;
+  }, [persistKey]);
+  useEffect(() => {
+    if (!hydrated || !bootReady) return;
+    if (!userId && !guestMode) return;
     if (bootCheckedRef.current) return;
     bootCheckedRef.current = true;
 
@@ -639,7 +1256,6 @@ setChallengeState((prev) => {
 
   return changed ? next : prev;
 });
-
     // Daily challenges available (once per day)
     const today = todayISO();
     if (stats.lastDailyChallengeNotified !== today) {
@@ -653,6 +1269,11 @@ setChallengeState((prev) => {
       setStats((prev) => ({ ...prev, lastDailyChallengeNotified: today }));
     }
 
+    // Weekly share card (auto-generated):
+    // - On Sundays: generates the report for the week ending today.
+    // - On Mon–Sat: ensures last week's report exists (so users who missed Sunday still get it).
+    maybeGenerateWeeklyReport();
+
     // Recurring reset (in case the app was closed during midnight)
     setQuests((prev) => applyRecurringResets(prev));
 
@@ -661,7 +1282,7 @@ setChallengeState((prev) => {
       setShop((prev) => ({ ...prev, activeBoost: null }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated]);
+  }, [hydrated, bootReady]);
 
 
   // ── Focus timer tick (only when a session is active)
@@ -802,10 +1423,43 @@ setChallengeState((prev) => {
         else setShop((prev) => ({ ...prev, activeBoost: null }));
       }
       const xpEarned = Math.round(quest.xpReward * multiplier);
-      const coinsEarned = quest.xpReward * 2;
+      const coinsEarned = Math.round(xpEarned * 2);
+      const completionTs = Date.now();
 
       // Mark quest completed
       const doneDate = todayISO();
+
+      // Heatmap completion history (supports recurring habits over time)
+      appendCompletionLog({
+        ts: completionTs,
+        day: doneDate,
+        questId: id,
+        title: quest.title,
+        category: quest.category,
+        difficulty: quest.difficulty,
+        xp: xpEarned,
+        coins: coinsEarned,
+      });
+      // Social leaderboard: log XP to Supabase (offline-safe; queued if needed)
+      void logXpEventWithQueue(xpEarned, 'quest_complete', {
+        questId: id,
+        title: quest.title,
+        day: doneDate,
+        multiplier,
+        coins: coinsEarned,
+      });
+
+      const nextQuestsForCriteria = quests.map((q) =>
+        q.id === id
+          ? ({
+              ...q,
+              status: 'completed' as const,
+              completedAt: doneDate,
+              completedAtTs: completionTs,
+              earnedXp: xpEarned,
+            } as Quest)
+          : q
+      );
       setQuests((prev) =>
         prev.map((q) =>
           q.id === id
@@ -813,6 +1467,8 @@ setChallengeState((prev) => {
                 ...q,
                 status: 'completed' as const,
                 completedAt: doneDate,
+                completedAtTs: completionTs,
+                earnedXp: xpEarned,
               } as Quest)
             : q
         )
@@ -889,16 +1545,19 @@ setChallengeState((prev) => {
         // SFX: chime on level up
         sfx.play('levelUp', sfxEnabled);
       }
+      // Achievements unlocked on this action (XP + semantic criteria)
+      const ctx: AchievementEvalCtx = {
+        stats: nextStats,
+        quests: nextQuestsForCriteria,
+        notes,
+        today: doneDate,
+        totalXp: newTotalXp,
+        lastQuestCompletedTs: completionTs,
+      };
 
-      // Achievements unlocked on this action
-      const unlockedNow: Achievement[] = [];
-      const nextAchievements = achievements.map((a) => {
-        if (a.unlocked || newTotalXp < a.xpRequired) return a;
-        const unlocked = { ...a, unlocked: true };
-        unlockedNow.push(unlocked);
-        addNotification(makeNotification('achievement', `${a.icon} ${a.title} Unlocked!`, a.description));
-        return unlocked;
-      });
+      const { next: nextAchievements, unlockedNow } = unlockAchievementsWithContext(achievements, ctx, (a) =>
+        addNotification(makeNotification('achievement', `${a.icon} ${a.title} Unlocked!`, a.description))
+      );
       setAchievements(nextAchievements);
       if (unlockedNow.length > 0) {
         // SFX: temple bell on achievement unlock
@@ -917,7 +1576,7 @@ setChallengeState((prev) => {
 
       setXpPopup({ xp: xpEarned, kind: 'quest' });
     },
-    [quests, stats, achievements, addNotification, shop.activeBoost, sfxEnabled]
+    [quests, notes, stats, achievements, addNotification, shop.activeBoost, sfxEnabled, appendCompletionLog, logXpEventWithQueue, userId]
   );
 
   const handleAddQuest = useCallback(
@@ -926,15 +1585,67 @@ setChallengeState((prev) => {
     []
   );
   const handleAddNote = useCallback((note: Omit<Note, 'id' | 'createdAt'>) => {
-  setNotes((prev) => [{ ...note, id: Date.now().toString(), createdAt: 'Just now' }, ...prev]);
-  // Challenges: track daily/weekly notes created (used for Vidya Seeker / Scroll Master)
-  setChallengeState((prev) => ({
-    ...prev,
-    dailyNotes: (prev.dailyNotes || 0) + 1,
-    weeklyNotes: (prev.weeklyNotes || 0) + 1,
-  }));
-}, []);
-  const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.filter((n) => n.id !== id)), []);
+    const createdAt = new Date().toISOString();
+    const nextNote: Note = { ...note, id: Date.now().toString(), createdAt };
+
+    setNotes((prev) => [nextNote, ...prev]);
+
+    // Challenges: track daily/weekly notes created (used for Vidya Seeker / Scroll Master)
+    setChallengeState((prev) => ({
+      ...prev,
+      dailyNotes: (prev.dailyNotes || 0) + 1,
+      weeklyNotes: (prev.weeklyNotes || 0) + 1,
+    }));
+
+    // Achievements: semantic unlocks based on notes
+    const ctx: AchievementEvalCtx = {
+      stats,
+      quests,
+      notes: [nextNote, ...notes],
+      today: todayISO(),
+      totalXp: stats.totalXpEarned ?? stats.xp,
+      lastNoteCreatedAt: createdAt,
+    };
+
+    const { next: nextAchievements, unlockedNow } = unlockAchievementsWithContext(achievements, ctx, (a) =>
+      addNotification(makeNotification('achievement', `${a.icon} ${a.title} Unlocked!`, a.description))
+    );
+
+    if (unlockedNow.length > 0) {
+      setAchievements(nextAchievements);
+      sfx.play('achievement', sfxEnabled);
+    }
+  }, [notes, quests, stats, achievements, addNotification, sfxEnabled]);
+  
+  const handleUpdateNote = useCallback(
+    (id: string, patch: Partial<Pick<Note, 'title' | 'content' | 'tags' | 'color' | 'emoji'>>) => {
+      const now = new Date().toISOString();
+      setNotes((prev) =>
+        prev.map((n) => {
+          if (n.id !== id) return n;
+          const rev: NoteRevision = {
+            editedAt: now,
+            title: n.title,
+            content: n.content,
+            tags: n.tags,
+            color: n.color,
+            emoji: n.emoji,
+          };
+          const prevRevs = Array.isArray((n as any).revisions) ? ((n as any).revisions as NoteRevision[]) : [];
+          const revisions = [rev, ...prevRevs].slice(0, 25);
+          return {
+            ...n,
+            ...patch,
+            updatedAt: now,
+            revisions,
+          };
+        })
+      );
+    },
+    []
+  );
+
+const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.filter((n) => n.id !== id)), []);
 
   // ── Profile actions ─────────────────────────────────────────────────────
   const handleExportData = useCallback(() => {
@@ -967,9 +1678,32 @@ setChallengeState((prev) => {
   }, [quests, notes, stats, achievements, notifications, shop, focusSession, isDark, isHinglish, sfxEnabled]);
 
   const handleResetAll = useCallback(() => {
-    // Full reset (including theme) – easiest + most reliable.
-    localStorage.removeItem('karmquest_state');
-    localStorage.removeItem('kq_theme');
+    // Full reset (including theme) – remove all per-user/guest/anon snapshots + additive logs.
+    try {
+      const prefixes = [
+        'karmquest_state',
+        'karmquest_state:',
+        'karmquest_completion_log_v1:',
+        'karmquest_weekly_reports_v1:',
+        'karmquest_xp_event_queue_v1:',
+        'karmquest_activity_queue_v1:',
+        'karmquest_offline_queue_v1:',
+      ];
+      const exact = new Set<string>(['kq_theme', 'karmquest_seed_mode']);
+
+      const keys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) keys.push(k);
+      }
+      keys.forEach((k) => {
+        if (exact.has(k) || prefixes.some((p) => k.startsWith(p))) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch {
+      // ignore
+    }
     window.location.reload();
   }, []);
   // ── Quest templates ───────────────────────────────────────────────────
@@ -1181,6 +1915,9 @@ setChallengeState((prev) => {
         totalXpEarned: newTotalXp,
       }));
 
+      // Social leaderboard: log focus bonus XP (offline-safe; queued if needed)
+      void logXpEventWithQueue(bonusXp, 'focus', { questId, title });
+
       // Challenges: track focus sessions completed + weekly XP earned
       setChallengeState((prev) => ({
         ...prev,
@@ -1190,16 +1927,25 @@ setChallengeState((prev) => {
 
       // SFX: coin on XP gain
       sfx.play('coin', sfxEnabled);
+      // Achievements unlocked on this action (XP + semantic criteria)
+      const nextStatsForCriteria: UserStats = {
+        ...stats,
+        xp: newXp,
+        xpToNext: newXpToNext,
+        level: newLevel,
+        totalXpEarned: newTotalXp,
+      };
+      const ctx: AchievementEvalCtx = {
+        stats: nextStatsForCriteria,
+        quests,
+        notes,
+        today: todayISO(),
+        totalXp: newTotalXp,
+      };
 
-      // Achievements unlocked on this action
-      const unlockedNow: Achievement[] = [];
-      const nextAchievements = achievements.map((a) => {
-        if (a.unlocked || newTotalXp < a.xpRequired) return a;
-        const unlocked = { ...a, unlocked: true };
-        unlockedNow.push(unlocked);
-        addNotification(makeNotification('achievement', `${a.icon} ${a.title} Unlocked!`, a.description));
-        return unlocked;
-      });
+      const { next: nextAchievements, unlockedNow } = unlockAchievementsWithContext(achievements, ctx, (a) =>
+        addNotification(makeNotification('achievement', `${a.icon} ${a.title} Unlocked!`, a.description))
+      );
       setAchievements(nextAchievements);
       if (unlockedNow.length > 0) {
         // SFX: temple bell on achievement unlock
@@ -1225,7 +1971,7 @@ setChallengeState((prev) => {
       setXpPopup({ xp: bonusXp, kind: 'focus' });
       setFocusSession(null);
     },
-    [quests, stats, achievements, addNotification, lang, sfxEnabled]
+    [quests, notes, stats, achievements, addNotification, lang, sfxEnabled, logXpEventWithQueue, userId]
   );
 
   // Auto-award focus bonus when timer completes
@@ -1250,7 +1996,19 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard stats={stats} quests={quests} notes={notes} achievements={achievements} onNavigate={handleNavigate} />;
+        return (
+          <Dashboard
+            stats={stats}
+            quests={quests}
+            notes={notes}
+            achievements={achievements}
+            onNavigate={handleNavigate}
+            weeklyReport={activeWeeklyReport}
+            onDismissWeeklyReport={handleDismissWeeklyReport}
+            weeklyReportAutoOpen={weeklyReportAutoOpen}
+            onWeeklyReportAutoOpenConsumed={() => setWeeklyReportAutoOpen(false)}
+          />
+        );
       case 'quests':
         return (
           <QuestBoard
@@ -1274,6 +2032,7 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
             notes={notes}
             onAdd={handleAddNote}
             onDelete={handleDeleteNote}
+            onUpdate={handleUpdateNote}
             externalSearchQuery={globalSearch}
             focusNoteId={focusNoteId}
             onFocusHandled={() => setFocusNoteId(null)}
@@ -1312,13 +2071,25 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
             onCloudSaveProfile={userId ? onCloudSaveProfile : undefined}
             cloudStatus={
               userId
-                ? { connected: cloud.remoteHydrated, saving: (cloud.saving || tasksCloud.syncing), error: (cloud.error ?? tasksCloud.error) }
-                : { connected: false, saving: false, error: null }
+                ? { connected: cloud.remoteHydrated, saving: (cloud.saving || tasksCloud.syncing), queued: cloud.queued || xpQueueCount > 0, error: (cloud.error ?? tasksCloud.error), lastSyncedAt: null }
+                : { connected: false, saving: false, queued: false, error: null, lastSyncedAt: null }
             }
           />
         );
       default:
-        return <Dashboard stats={stats} quests={quests} notes={notes} achievements={achievements} onNavigate={handleNavigate} />;
+        return (
+          <Dashboard
+            stats={stats}
+            quests={quests}
+            notes={notes}
+            achievements={achievements}
+            onNavigate={handleNavigate}
+            weeklyReport={activeWeeklyReport}
+            onDismissWeeklyReport={handleDismissWeeklyReport}
+            weeklyReportAutoOpen={weeklyReportAutoOpen}
+            onWeeklyReportAutoOpenConsumed={() => setWeeklyReportAutoOpen(false)}
+          />
+        );
     }
   };
 
@@ -1337,8 +2108,32 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
     );
   }
 
+  if (!userId && guestMode && guestBooting) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center px-4 py-10 text-sm text-slate-500">
+        Setting up guest profile...
+      </div>
+    );
+  }
+
   if (!userId && !guestMode) {
-    return <AuthGate onContinueAsGuest={() => setGuestMode(true)} />;
+    return (
+      <AuthGate
+        onContinueAsGuest={() => {
+          // Always start Guest fresh (no persistence across guest sessions)
+          try {
+            localStorage.removeItem('karmquest_state:guest');
+            localStorage.removeItem('karmquest_completion_log_v1:guest');
+            localStorage.removeItem('karmquest_weekly_reports_v1:guest');
+          } catch {
+            // ignore
+          }
+          guestHadStateRef.current = false;
+          setGuestBooting(true);
+          setGuestMode(true);
+        }}
+      />
+    );
   }
 
   return (
@@ -1365,6 +2160,9 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
         stats={stats}
         avatarFrame={shop.equippedFrame}
         xpBoost={shop.activeBoost}
+        focusSession={focusSession}
+        focusRemainingMs={focusRemainingMs}
+        onStopFocus={() => stopFocus()}
         onThemeChange={onThemeChange}
         sidebarOffsetPx={sidebarOffsetPx}
         onMobileMenuOpen={() => setMobileOpen(true)}
@@ -1385,6 +2183,20 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
           setFocusNoteId(nid);
           setFocusQuestId(null);
         }}
+        authEmail={userEmail}
+        cloudStatus={
+          userId
+            ? {
+                connected: cloud.remoteHydrated,
+                saving: cloud.saving || tasksCloud.syncing,
+                queued: cloud.queued || xpQueueCount > 0,
+                error: cloud.error ?? tasksCloud.error,
+                lastSyncedAt: null,
+              }
+            : { connected: false, saving: false, queued: false, error: null, lastSyncedAt: null }
+        }
+        onOpenAuth={!userId ? () => setGuestMode(false) : undefined}
+        onSignOut={userId ? () => void signOut() : undefined}
       />
 
       <main

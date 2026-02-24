@@ -109,11 +109,21 @@ const challenges: Challenge[] = useMemo(() => ([
     const last = localStorage.getItem(storageKey);
     if (last === triggerKey) return;
 
+    // Auto-award the Ravana reward when the boss fight triggers (prevents "shown but not granted").
+    if (ravana && !claimed[ravana.id]) {
+      onClaim(ravana.id, ravana.reward);
+      showClaimToast(ravana.reward);
+    }
+
     localStorage.setItem(storageKey, triggerKey);
     setBossFightOpen(true);
-  }, [ravanaIsComplete]);
+  }, [ravanaIsComplete, ravana, claimed, onClaim]);
 
   const [untilMidnight, setUntilMidnight] = useState(timeUntilLocalMidnight());
+
+  const hh = String(untilMidnight.h).padStart(2, "0");
+  const mm = String(untilMidnight.m).padStart(2, "0");
+  const ss = String((untilMidnight as any).s ?? 0).padStart(2, "0");
 
   // ── Claim toast (mini reward feedback) ───────────────────────────────
   const [toast, setToast] = useState<null | { title: string; subtitle?: string }>(null);
@@ -246,7 +256,7 @@ const challenges: Challenge[] = useMemo(() => ([
           </div>
         </div>
         <div className="text-right">
-          <p className={`text-base font-bold ${tp}`}>{untilMidnight.h}h {untilMidnight.m}m</p>
+          <p className={`text-base font-bold ${tp}`}>{hh}:{mm}:{ss}</p>
           <p className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t('untilReset', lang)}</p>
         </div>
       </div>
@@ -263,10 +273,11 @@ function timeUntilLocalMidnight() {
   const midnight = new Date(now);
   midnight.setHours(24, 0, 0, 0);
   const diffMs = midnight.getTime() - now.getTime();
-  const totalMinutes = Math.max(0, Math.ceil(diffMs / 60000)); // ceil avoids "0m" too early
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return { h, m };
+  const totalSeconds = Math.max(0, Math.ceil(diffMs / 1000));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return { h, m, s };
 }
 
 // ISO week key like "2026-W08"

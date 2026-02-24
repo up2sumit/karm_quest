@@ -13,6 +13,7 @@ import {
   boostRemainingMs,
   formatMs,
   titleBadgeMeta,
+	  titleBadgePillClass,
 } from '../shop';
 
 interface MudraShopProps {
@@ -51,14 +52,14 @@ function ShopItemCard({ item, owned, equipped, coins, onBuy, onEquip, kindLabel 
           : isDark ? 'bg-white/[0.05] text-indigo-300'
           : 'bg-indigo-50 text-indigo-600'
         }`}>
-          {item.icon}
+	          {item.emoji}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className={`text-[13px] font-bold ${tp} truncate`}>{item.name}</p>
-              <p className={`text-[11px] mt-0.5 ${ts}`}>{item.desc}</p>
+	              <p className={`text-[11px] mt-0.5 ${ts}`}>{item.description}</p>
             </div>
             <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold ${
               isHinglish ? 'bg-rose-50 text-rose-600'
@@ -284,15 +285,15 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
                   <div className="flex items-start gap-3.5">
                     <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-sm ${
                       isHinglish ? 'bg-violet-500/10 text-violet-600' : isDark ? 'bg-white/[0.05] text-violet-300' : 'bg-violet-50 text-violet-600'
-                    }`}>{item.icon}</div>
+	                    }`}>{item.emoji}</div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className={`text-[13px] font-bold ${tp}`}>{item.name}</p>
                         {meta.label && (
-                          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold ${meta.cls}`}>{meta.label}</span>
+	                          <span className={titleBadgePillClass(meta.id, (isHinglish ? 'hinglish' : isDark ? 'dark' : 'light'))}>{meta.label}</span>
                         )}
                       </div>
-                      <p className={`text-[11px] mt-0.5 ${ts}`}>{item.desc}</p>
+	                      <p className={`text-[11px] mt-0.5 ${ts}`}>{item.description}</p>
 
                       <div className="mt-3 flex items-center justify-between">
                         <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${

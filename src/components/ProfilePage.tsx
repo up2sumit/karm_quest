@@ -6,6 +6,7 @@ import { CloudInspector } from './CloudInspector';
 import { RemindersPanel } from './RemindersPanel';
 import type { Achievement, Note, Quest, UserStats } from '../store';
 import { questTemplates, type QuestTemplateId } from '../templates/questTemplates';
+import FriendsLeaderboard from './FriendsLeaderboard';
 
 interface ProfilePageProps {
   stats: UserStats;
@@ -329,6 +330,35 @@ export function ProfilePage({
             </button>
           ) : null}
         </div>
+      </div>
+
+
+      {/* Friends / Leaderboard */}
+      <div className={`${card} rounded-3xl p-5 md:p-6`}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className={`text-[11px] font-semibold uppercase tracking-wide ${ts}`}>{isHinglish ? 'Friends' : 'Friends'}</div>
+            <div className={`mt-2 text-sm font-bold ${tp}`}>
+              {isHinglish ? 'Weekly XP Leaderboard' : 'Weekly XP Leaderboard'}
+            </div>
+            <div className={`mt-1 text-xs ${ts}`}>
+              {isHinglish
+                ? 'Username se friends add karo aur weekly Punya compare karo.'
+                : 'Add friends by username and compare weekly Punya.'}
+            </div>
+            {!authUserId ? (
+              <div className={`mt-3 text-xs ${ts}`}>
+                {isHinglish ? 'Leaderboard ke liye login zaroori hai.' : 'Login is required to use Friends & Leaderboard.'}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {authUserId ? (
+          <div className="mt-4">
+            <FriendsLeaderboard />
+          </div>
+        ) : null}
       </div>
 
       {/* Cloud Data Inspector */}

@@ -108,6 +108,12 @@ const translations = {
   deleteScroll: { en: 'Delete Scroll', hi: 'Delete Kar Do 🗑️' },
   attachments: { en: 'Attachments', hi: 'Files 📎' },
 
+  // Analytics
+  categoryAnalyticsTitle: { en: 'Category Analytics', hi: 'Category Analytics 📊' },
+  categoryAnalyticsSub: { en: 'XP earned by category (last 7 days)', hi: 'Last 7 din ka XP breakdown' },
+  last7Days: { en: 'Last 7 days', hi: 'Last 7 din' },
+  categoryAnalyticsEmpty: { en: 'No completed quests in the last 7 days.', hi: 'Last 7 din mein koi completed quest nahi.' },
+
   // Achievements
   achievementsTitle: { en: 'Siddhi Hall', hi: 'Trophy Room 🏆' },
   achievementsSub: { en: 'Your legendary accomplishments & divine blessings', hi: 'Tumhari saari trophies aur achievements yahan hai!' },

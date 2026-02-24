@@ -1,9 +1,13 @@
 import { TrendingUp, Target, Zap, Trophy, ArrowRight } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { t, getQuotes } from '../i18n';
-import type { UserStats, Quest, Note, Achievement } from '../store';
+import type { UserStats, Quest, Note, Achievement, WeeklyReport } from '../store';
+import { todayISO } from '../store';
 import { useState, useEffect, useMemo } from 'react';
 import { MoodCheckIn } from './MoodCheckIn';
+import { CategoryAnalytics } from './CategoryAnalytics';
+import { HabitHeatmap } from './HabitHeatmap';
+import { WeeklyReportCard } from './WeeklyReportCard';
 
 interface DashboardProps {
   stats: UserStats;
@@ -11,12 +15,40 @@ interface DashboardProps {
   notes: Note[];
   achievements: Achievement[];
   onNavigate: (page: 'quests' | 'notes' | 'achievements') => void;
+  weeklyReport?: WeeklyReport | null;
+  onDismissWeeklyReport?: (weekStart: string) => void;
+  weeklyReportAutoOpen?: boolean;
+  onWeeklyReportAutoOpenConsumed?: () => void;
 }
 
-export function Dashboard({ stats, quests, notes, achievements, onNavigate }: DashboardProps) {
+function prettyCreatedAt(createdAt: string): string {
+  const ms = Date.parse(createdAt);
+  if (Number.isNaN(ms)) return createdAt;
+  const diff = Date.now() - ms;
+  if (diff < 45_000) return "Just now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  const days = Math.floor(hrs / 24);
+  return days + "d ago";
+}
+
+export function Dashboard({
+  stats,
+  quests,
+  notes,
+  achievements,
+  onNavigate,
+  weeklyReport,
+  onDismissWeeklyReport,
+  weeklyReportAutoOpen,
+  onWeeklyReportAutoOpenConsumed,
+}: DashboardProps) {
   const { isDark, isHinglish, lang } = useTheme();
   const [quote, setQuote] = useState('');
-  const completedToday = quests.filter(q => q.status === 'completed').length;
+  const today = todayISO();
+  const completedToday = quests.filter(q => q.status === 'completed' && q.completedAt === today).length;
   const totalToday = quests.length;
   const progressPercent = totalToday > 0 ? Math.round((completedToday / totalToday) * 100) : 0;
   const unlockedCount = achievements.filter(a => a.unlocked).length;
@@ -91,7 +123,7 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { icon: <Target className={isHinglish ? 'text-rose-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'} size={20} />, label: t('todaysKarma', lang), value: `${completedToday}/${totalToday}`, sub: t('questsDone', lang), emoji: '🎯' },
-          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${stats.totalXp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨' },
+          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${stats.totalXpEarned ?? stats.xp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨' },
           { icon: <Zap className={isHinglish ? 'text-amber-400' : isDark ? 'text-amber-400' : 'text-amber-500'} size={20} />, label: t('goldMudras', lang), value: `${stats.coins}`, sub: t('keepGrinding', lang), emoji: '🪙' },
           { icon: <Trophy className={isHinglish ? 'text-orange-400' : isDark ? 'text-orange-400' : 'text-orange-500'} size={20} />, label: t('siddhiLabel', lang), value: `${unlockedCount}/${achievements.length}`, sub: t('unlocked', lang), emoji: '🏆' },
         ].map((item, i) => (
@@ -176,7 +208,7 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
                 <div className="min-w-0 flex-1">
                   <p className={`text-[13px] font-semibold truncate ${tp}`}>{note.title}</p>
                   <p className={`text-[11px] truncate ${ts}`}>{note.content}</p>
-                  <p className={`text-[10px] mt-0.5 ${tm}`}>{note.createdAt}</p>
+                  <p className={`text-[10px] mt-0.5 ${tm}`}>{prettyCreatedAt(note.createdAt)}</p>
                 </div>
               </div>
             ))}
@@ -239,6 +271,19 @@ export function Dashboard({ stats, quests, notes, achievements, onNavigate }: Da
           </div>
         </div>
       </div>
+
+      <CategoryAnalytics quests={quests} />
+
+      <HabitHeatmap quests={quests} />
+
+      {weeklyReport ? (
+        <WeeklyReportCard
+          report={weeklyReport}
+          autoOpen={weeklyReportAutoOpen}
+          onAutoOpenConsumed={onWeeklyReportAutoOpenConsumed}
+          onDismissFromDashboard={onDismissWeeklyReport}
+        />
+      ) : null}
     </div>
   );
 }

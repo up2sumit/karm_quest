@@ -36,7 +36,6 @@ export function QuestCalendar({
 }) {
   const { isDark, isHinglish, lang } = useTheme();
 
-  const selectedDate = useMemo(() => isoToDate(selectedISO), [selectedISO]);
   const [monthCursor, setMonthCursor] = useState<Date>(() => {
     const d = isoToDate(selectedISO || todayISO());
     d.setDate(1);
