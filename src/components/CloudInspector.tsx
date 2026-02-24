@@ -22,15 +22,29 @@ type UserStateRow = {
   updated_at: string;
 };
 
+type AttachmentRow = {
+  id: string;
+  user_id: string;
+  entity_type: string;
+  entity_id: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+};
+
 export function CloudInspector({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { isDark, isHinglish } = useTheme();
 
-  const [tab, setTab] = useState<'user_state' | 'tasks'>('user_state');
+  const [tab, setTab] = useState<'user_state' | 'tasks' | 'attachments'>('user_state');
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [states, setStates] = useState<UserStateRow[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tasksSchemaHint, setTasksSchemaHint] = useState<string | null>(null);
+  const [attachmentsSchemaHint, setAttachmentsSchemaHint] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -63,6 +77,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
     setLoading(true);
     setError(null);
     setTasksSchemaHint(null);
+    setAttachmentsSchemaHint(null);
 
     try {
       const { data: userRes, error: userErr } = await supabase.auth.getUser();
@@ -72,6 +87,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
         setError(isHinglish ? 'Login nahi hai. Pehle sign in karo.' : 'Not signed in. Please sign in first.');
         setTasks([]);
         setStates([]);
+        setAttachments([]);
         return;
       }
 
@@ -85,7 +101,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
       if (stateRes.error) throw stateRes.error;
       setStates((stateRes.data as UserStateRow[]) ?? []);
 
-      // Prefer the newer schema (quest_id). Fall back if the column isn't there yet.
+      // Prefer newer schema (quest_id). Fall back if column isn't there.
       const tasksResNew = await supabase
         .from('tasks')
         .select('id,user_id,quest_id,title,done,created_at')
@@ -97,7 +113,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
         const msg = tasksResNew.error.message.toLowerCase();
         if (msg.includes('quest_id') && msg.includes('does not exist')) {
           setTasksSchemaHint(
-            'Your tasks table is missing column "quest_id". Run the Phase 2 SQL patch to enable automatic syncing from Quests → tasks table.'
+            'Your tasks table is missing column "quest_id". Run the Phase 2 SQL patch to enable automatic syncing from Quests → tasks table.',
           );
           const tasksResOld = await supabase
             .from('tasks')
@@ -112,6 +128,26 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
         }
       } else {
         setTasks((tasksResNew.data as TaskRow[]) ?? []);
+      }
+
+      // Attachments (Phase 8)
+      const attRes = await supabase
+        .from('attachments')
+        .select('id,user_id,entity_type,entity_id,file_name,storage_path,mime_type,size_bytes,created_at')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (attRes.error) {
+        const msg = attRes.error.message.toLowerCase();
+        if (msg.includes('relation') && msg.includes('attachments') && msg.includes('does not exist')) {
+          setAttachmentsSchemaHint('Attachments table not found. Run the Phase 8 SQL patch (phase8_attachments.sql).');
+          setAttachments([]);
+        } else {
+          throw attRes.error;
+        }
+      } else {
+        setAttachments((attRes.data as AttachmentRow[]) ?? []);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -148,7 +184,6 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
     }
   }
 
-  // Using a portal ensures this modal is always rendered at the document root.
   const portalTarget = typeof document !== 'undefined' ? document.body : null;
   if (!open || !portalTarget) return null;
 
@@ -230,6 +265,20 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
             >
               tasks ({tasks.length})
             </button>
+            <button
+              onClick={() => setTab('attachments')}
+              className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
+                tab === 'attachments'
+                  ? isHinglish
+                    ? 'bg-rose-500 text-white'
+                    : isDark
+                      ? 'bg-indigo-500 text-white'
+                      : 'bg-indigo-600 text-white'
+                  : ts
+              }`}
+            >
+              attachments ({attachments.length})
+            </button>
           </div>
         </div>
 
@@ -280,6 +329,41 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
                       </div>
                       <div className={`text-[10px] ${ts} shrink-0 hidden sm:block`}>
                         {t.quest_id ? `qid:${String(t.quest_id).slice(0, 8)}…` : `${t.id.slice(0, 8)}…`}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {!error && tab === 'attachments' && (
+            <div className={`rounded-2xl overflow-hidden ${btnSoft}`}>
+              <div className={`px-4 py-3 text-[12px] font-semibold ${tp} border-b border-white/[0.06]`}>
+                {isHinglish ? 'Attachments table rows' : 'Attachments table rows'}
+              </div>
+
+              {attachmentsSchemaHint ? (
+                <div className={`px-4 pt-3 pb-2 text-[12px] ${ts}`}>
+                  <span className="font-semibold">Fix:</span> {attachmentsSchemaHint}
+                </div>
+              ) : null}
+
+              <div className="divide-y divide-white/[0.06]">
+                {attachments.length === 0 ? (
+                  <div className={`px-4 py-4 text-[12px] ${ts}`}>{isHinglish ? 'No rows found.' : 'No rows found.'}</div>
+                ) : (
+                  attachments.map((a) => (
+                    <div key={a.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className={`text-[13px] font-semibold ${tp} truncate`}>{a.file_name}</div>
+                        <div className={`text-[11px] ${ts}`}>
+                          {new Date(a.created_at).toLocaleString()} • {a.entity_type}:{String(a.entity_id).slice(0, 8)}…
+                        </div>
+                        <div className={`text-[10px] ${ts} truncate`}>{a.storage_path}</div>
+                      </div>
+                      <div className={`text-[11px] ${ts} shrink-0 hidden sm:block`}>
+                        {a.size_bytes ? `${Math.round(a.size_bytes / 1024)} KB` : ''}
                       </div>
                     </div>
                   ))

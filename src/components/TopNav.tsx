@@ -16,6 +16,9 @@ interface TopNavProps {
   focusRemainingMs: number;
   onStopFocus: () => void;
 
+  /** Persist theme changes (optional). */
+  onThemeChange?: (mode: ThemeMode) => void | Promise<void>;
+
   /** Left offset in px to account for the desktop sidebar (0 on mobile). */
   sidebarOffsetPx: number;
   onMobileMenuOpen: () => void;
@@ -47,6 +50,7 @@ const typeAccent: Record<NotificationType, { dot: string; unreadBg: string; unre
   daily_challenge: { dot: 'bg-indigo-500',  unreadBg: 'bg-indigo-50',   unreadBgDark: 'bg-indigo-500/10'  },
   level_up:        { dot: 'bg-violet-500',  unreadBg: 'bg-violet-50',   unreadBgDark: 'bg-violet-500/10'  },
   focus:          { dot: 'bg-cyan-500',    unreadBg: 'bg-cyan-50',     unreadBgDark: 'bg-cyan-500/10'    },
+  reminder:       { dot: 'bg-pink-500',    unreadBg: 'bg-pink-50',     unreadBgDark: 'bg-pink-500/10'    },
 };
 
 function NotifRow({ n, isDark, onMarkRead }: {
@@ -311,6 +315,7 @@ export function TopNav({
   focusSession,
   focusRemainingMs,
   onStopFocus,
+  onThemeChange,
   sidebarOffsetPx,
   onMobileMenuOpen,
   notifications,
@@ -550,7 +555,11 @@ export function TopNav({
             <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl p-1.5 shadow-xl border animate-slide-up z-50 ${isHinglish ? 'bg-white/95 backdrop-blur-xl border-rose-200/30' : isDark ? 'bg-[#1A1A2E] border-white/[0.06] backdrop-blur-xl' : 'bg-white border-slate-200/50 backdrop-blur-xl'}`}>
               <p className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Theme</p>
               {themeOptions.map(opt => (
-                <button key={opt.mode} onClick={() => { setTheme(opt.mode); setShowThemeMenu(false); }}
+                <button key={opt.mode} onClick={() => {
+                    const fn = onThemeChange ?? setTheme;
+                    Promise.resolve(fn(opt.mode));
+                    setShowThemeMenu(false);
+                  }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all text-left ${theme === opt.mode ? isDark ? 'bg-white/[0.06] ring-1 ring-indigo-500/30' : 'bg-slate-50 ring-1 ring-indigo-300/30' : isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50'}`}>
                   <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${opt.color} flex items-center justify-center text-sm shadow-sm`}>{opt.icon}</div>
                   <div className="flex-1">

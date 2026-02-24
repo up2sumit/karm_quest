@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { logActivity } from '../lib/activity';
 
 export type MoodValue = 1 | 2 | 3 | 4 | 5;
 
@@ -64,6 +65,14 @@ export function useMoodLog() {
   const todayEntry = useMemo(() => entries.find((e) => e.date === today) || null, [entries, today]);
 
   const setTodayMood = useCallback((mood: MoodValue, productivity: number) => {
+    // Non-blocking activity log (no-op in guest mode).
+    void logActivity({
+      eventType: 'mood_checkin',
+      entityType: 'mood_log',
+      entityId: today,
+      payload: { mood, productivity },
+    });
+
     setEntries((prev) => {
       const next = [...prev];
       const idx = next.findIndex((e) => e.date === today);

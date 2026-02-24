@@ -1,7 +1,8 @@
-import { Plus, Search, X, Tag } from 'lucide-react';
+import { Plus, Search, X, Tag, Paperclip, Upload, ExternalLink, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
+import { useSupabaseAttachments } from '../hooks/useSupabaseAttachments';
 import type { Note } from '../store';
 import { noteColors } from '../store';
 
@@ -26,11 +27,16 @@ export function NotesVault({ notes, onAdd, onDelete, externalSearchQuery = '', f
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [previewNote, setPreviewNote] = useState<Note | null>(null);
+  const previewNoteId = previewNote?.id ?? null;
+  const attachments = useSupabaseAttachments('note', previewNoteId);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newTags, setNewTags] = useState('');
   const [newColor, setNewColor] = useState(noteColors[0]);
   const [newEmoji, setNewEmoji] = useState('📜');
+  const [sizePopup, setSizePopup] = useState<{ title: string; message: string } | null>(null);
+  const MAX_ATTACHMENT_BYTES = 1 * 1024 * 1024; // 1MB
+
 
   const card = isHinglish
     ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
@@ -82,6 +88,49 @@ export function NotesVault({ notes, onAdd, onDelete, externalSearchQuery = '', f
 
   return (
     <div className="space-y-5 animate-slide-up">
+      {sizePopup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSizePopup(null)}>
+          <div
+            className={`w-full max-w-sm rounded-2xl shadow-2xl p-5 border ${
+              isHinglish
+                ? 'bg-white/90 border-rose-200/40'
+                : isDark
+                  ? 'bg-[#16162A] border-white/[0.08]'
+                  : 'bg-white border-slate-200/60'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className={`text-[14px] font-bold ${tp}`}>{sizePopup.title}</div>
+                <div className={`text-[12px] mt-1 ${ts}`}>{sizePopup.message}</div>
+              </div>
+              <button
+                onClick={() => setSizePopup(null)}
+                className={`p-2 rounded-xl transition-all ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-slate-100'}`}
+                aria-label="Close"
+              >
+                <X size={16} className={isDark ? 'text-slate-300' : 'text-slate-600'} />
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setSizePopup(null)}
+                className={`px-4 py-2 rounded-xl text-[12px] font-semibold ${
+                  isHinglish
+                    ? 'bg-rose-500/10 text-rose-700'
+                    : isDark
+                      ? 'bg-white/[0.06] text-slate-200'
+                      : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {isHinglish ? 'OK' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
@@ -269,6 +318,110 @@ export function NotesVault({ notes, onAdd, onDelete, externalSearchQuery = '', f
                 </span>
               ))}
             </div>
+
+{/* Attachments */}
+<div className={`rounded-xl p-3 mb-4 ${isHinglish ? 'bg-white/60 border border-rose-200/30' : isDark ? 'bg-white/[0.03] border border-white/[0.06]' : 'bg-slate-50/80 border border-slate-200/50'}`}>
+  <div className="flex items-center justify-between gap-3 mb-2">
+    <div className="flex items-center gap-2">
+      <Paperclip size={14} className={isHinglish ? 'text-rose-600' : isDark ? 'text-slate-300' : 'text-slate-700'} />
+      <p className={`text-[12px] font-semibold ${tp}`}>{isHinglish ? 'Attachments' : t('attachments', lang) ?? 'Attachments'}</p>
+      <span className={`text-[11px] ${ts}`}>({attachments.rows.length})</span>
+    </div>
+
+    <label className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] cursor-pointer transition-all ${
+      !attachments.canUse ? (isDark ? 'bg-white/[0.03] text-slate-500' : 'bg-slate-100 text-slate-400')
+      : (isHinglish ? 'bg-rose-500/10 text-rose-600 hover:bg-rose-500/15' : isDark ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]' : 'bg-white text-slate-700 hover:bg-slate-50')
+    }`}>
+      <Upload size={14} />
+      {attachments.loading ? (isHinglish ? 'Uploading…' : 'Uploading…') : (isHinglish ? 'Upload' : 'Upload')}
+      <input
+        type="file"
+        multiple
+        className="hidden"
+        disabled={!attachments.canUse || attachments.loading}
+        onChange={async (e) => {
+          const files = e.target.files;
+          if (!files || files.length === 0) {
+            e.currentTarget.value = '';
+            return;
+          }
+
+          const list = Array.from(files);
+          const tooLarge = list.filter(f => f.size > MAX_ATTACHMENT_BYTES);
+          const okFiles = list.filter(f => f.size <= MAX_ATTACHMENT_BYTES);
+
+          if (tooLarge.length > 0) {
+            const names = tooLarge.map(f => `${f.name} (${Math.round(f.size / 1024)} KB)`).slice(0, 6).join(', ');
+            setSizePopup({
+              title: isHinglish ? 'File bada hai' : 'File too large',
+              message: isHinglish
+                ? `1MB se chhota file upload karo. Too large: ${names}${tooLarge.length > 6 ? '…' : ''}`
+                : `Please upload files under 1MB. Too large: ${names}${tooLarge.length > 6 ? '…' : ''}`,
+            });
+          }
+
+          if (okFiles.length > 0) {
+            await attachments.uploadFiles(okFiles);
+          }
+
+          // reset so same file can be selected again
+          e.currentTarget.value = '';
+        }}
+      />
+    </label>
+  </div>
+
+  {!attachments.canUse && (
+    <p className={`text-[11px] ${ts}`}>
+      {isHinglish ? 'Login karke files attach karo.' : 'Sign in to attach files.'}
+    </p>
+  )}
+
+  {attachments.error && (
+    <p className="text-[11px] text-red-400 mt-1">{attachments.error}</p>
+  )}
+
+  {attachments.rows.length === 0 ? (
+    <p className={`text-[11px] ${ts}`}>{isHinglish ? 'No attachments yet.' : 'No attachments yet.'}</p>
+  ) : (
+    <div className="mt-2 space-y-2">
+      {attachments.rows.map((a) => (
+        <div key={a.id} className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 ${
+          isHinglish ? 'bg-white/60' : isDark ? 'bg-white/[0.03]' : 'bg-white'
+        }`}>
+          <div className="min-w-0">
+            <p className={`text-[12px] font-medium truncate ${tp}`}>{a.file_name}</p>
+            <p className={`text-[10px] ${ts}`}>
+              {attachments.formatBytes(a.size_bytes)} {a.mime_type ? `• ${a.mime_type}` : ''}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => attachments.openSignedUrl(a)}
+              className={`p-2 rounded-lg transition-all ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-slate-100'}`}
+              title="Open"
+            >
+              <ExternalLink size={14} className={isDark ? 'text-slate-300' : 'text-slate-600'} />
+            </button>
+            <button
+              onClick={() => attachments.remove(a)}
+              className={`p-2 rounded-lg transition-all ${isDark ? 'hover:bg-red-500/10' : 'hover:bg-red-50'}`}
+              title="Delete"
+            >
+              <Trash2 size={14} className="text-red-400" />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  <p className={`text-[10px] mt-2 ${tm}`}>
+    {isHinglish ? 'Tip: 1MB max per file.' : 'Tip: 1MB max per file.'}
+  </p>
+</div>
+
             <div className="flex justify-end">
               <button onClick={() => { onDelete(previewNote.id); setPreviewNote(null); }}
                 className="px-3.5 py-1.5 text-[12px] text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all">

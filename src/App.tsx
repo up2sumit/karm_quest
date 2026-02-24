@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { ThemeProvider, useTheme, type ThemeMode } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthGate } from './components/AuthGate';
+import { OfflineSyncBootstrap } from './components/OfflineSyncBootstrap';
 import { useSupabaseProfile } from './hooks/useSupabaseProfile';
 import { useSupabaseUserState } from './hooks/useSupabaseUserState';
 import { useSupabaseTasksSync } from './hooks/useSupabaseTasksSync';
+import { useSupabaseInAppNotifications } from './hooks/useSupabaseInAppNotifications';
 import { Sidebar } from './components/Sidebar';
 import { TopNav } from './components/TopNav';
 import { Dashboard } from './components/Dashboard';
@@ -209,6 +211,9 @@ function applyRecurringResets(list: Quest[]): Quest[] {
 
 function AppContent() {
   const { isDark, isHinglish, lang, theme, setTheme } = useTheme();
+  // Prevent cloud profile from overriding theme after the user changes it.
+  const themeHydratedRef = useRef<string | null>(null);
+  const themeUserOverrideRef = useRef(false);
   const { user, loading: authLoading, signOut } = useAuth();
   const [guestMode, setGuestMode] = useState(false);
 
@@ -218,6 +223,11 @@ function AppContent() {
 
   const userId = user?.id ?? null;
   const userEmail = user?.email ?? null;
+
+  useEffect(() => {
+    themeHydratedRef.current = null;
+    themeUserOverrideRef.current = false;
+  }, [userId]);
 
   // JS-driven breakpoints
   const isMdUp = useMinWidth(768);
@@ -465,6 +475,58 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
     debounceMs: 800,
   });
 
+  // Phase 7: In-app notifications (Reminders)
+  // - The DB cron job inserts rows into `in_app_notifications` when reminders are due.
+  // - We subscribe here and push them into the existing Notifications UI.
+  const inbox = useSupabaseInAppNotifications({
+    enabled: !!userId && hydrated,
+    userId,
+    limit: 50,
+    onNew: (row) => {
+      setNotifications((prev) => {
+        const n: AppNotification = {
+          id: row.id,
+          type: 'reminder',
+          title: row.title,
+          message: row.message,
+          timestamp: row.created_at || new Date().toISOString(),
+          read: !!row.read,
+          icon: '⏰',
+        };
+        const seen = new Set<string>();
+        const merged = [n, ...prev].filter((x) => {
+          if (seen.has(x.id)) return false;
+          seen.add(x.id);
+          return true;
+        });
+        return merged.slice(0, 50);
+      });
+    },
+  });
+
+  // Merge already-existing cloud notifications (when the user opens the app)
+  useEffect(() => {
+    if (!inbox.items || inbox.items.length === 0) return;
+    setNotifications((prev) => {
+      const mapped: AppNotification[] = inbox.items.map((row) => ({
+        id: row.id,
+        type: 'reminder',
+        title: row.title,
+        message: row.message,
+        timestamp: row.created_at || new Date().toISOString(),
+        read: !!row.read,
+        icon: '⏰',
+      }));
+      const seen = new Set<string>();
+      const merged = [...mapped, ...prev].filter((x) => {
+        if (seen.has(x.id)) return false;
+        seen.add(x.id);
+        return true;
+      });
+      return merged.slice(0, 50);
+    });
+  }, [inbox.items]);
+
   const { profile: cloudProfile, updateProfile: updateCloudProfile } = useSupabaseProfile(userId, userEmail);
 
   useEffect(() => {
@@ -477,8 +539,12 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
       avatarEmoji: cloudProfile.avatar_emoji ?? prev.avatarEmoji,
     }));
 
-    const mode = cloudProfile.theme_mode;
-    if (mode && mode !== theme) setTheme(mode);
+    // Apply theme from cloud only once per login (and don't override after user changes theme).
+    if (!themeUserOverrideRef.current && themeHydratedRef.current !== userId) {
+      const mode = cloudProfile.theme_mode as ThemeMode | null | undefined;
+      if (mode && mode !== theme) setTheme(mode);
+      themeHydratedRef.current = userId;
+    }
   }, [cloudProfile, setTheme, theme, userId]);
 
   const onCloudSaveProfile = useCallback(
@@ -488,6 +554,22 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
     },
     [theme, updateCloudProfile, userId]
   );
+
+  const onThemeChange = useCallback(
+    async (mode: ThemeMode) => {
+      themeUserOverrideRef.current = true;
+      setTheme(mode);
+
+      if (!userId) return;
+      try {
+        await updateCloudProfile({ theme_mode: mode });
+      } catch (e) {
+        console.warn('[KarmQuest] Failed to persist theme_mode to cloud', e);
+      }
+    },
+    [setTheme, updateCloudProfile, userId]
+  );
+
 
   // Responsive layout metrics
   const sidebarOffsetPx = isMdUp ? ((sidebarCollapsed || !isLgUp) ? 80 : 256) : 0;
@@ -649,11 +731,21 @@ setChallengeState((prev) => {
     setNotifications((prev) => [n, ...prev].slice(0, 50));
   }, []);
   const markRead = useCallback(
-    (id: string) => setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n))),
-    []
+    (id: string) => {
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      // Best-effort cloud update (only affects rows that exist in in_app_notifications)
+      void inbox.markRead(id);
+    },
+    [inbox]
   );
-  const markAllRead = useCallback(() => setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))), []);
-  const clearAll = useCallback(() => setNotifications([]), []);
+  const markAllRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    void inbox.markAllRead();
+  }, [inbox]);
+  const clearAll = useCallback(() => {
+    setNotifications([]);
+    void inbox.clearAll();
+  }, [inbox]);
 
   const handleNavigate = useCallback((page: Page) => {
     setCurrentPage(page);
@@ -1215,6 +1307,7 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
             onToggleSfx={setSfxEnabled}
             onApplyTemplate={applyQuestTemplate}
             authEmail={userEmail}
+            authUserId={userId}
             onSignOut={userId ? () => void signOut() : undefined}
             onCloudSaveProfile={userId ? onCloudSaveProfile : undefined}
             cloudStatus={
@@ -1252,6 +1345,7 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
     <div className={`min-h-screen relative transition-colors duration-700 overflow-x-hidden ${bgGradient}`}>
       <SubtlePattern />
       <Particles />
+      <OfflineSyncBootstrap />
 
       <Sidebar
         currentPage={currentPage}
@@ -1271,6 +1365,7 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
         stats={stats}
         avatarFrame={shop.equippedFrame}
         xpBoost={shop.activeBoost}
+        onThemeChange={onThemeChange}
         sidebarOffsetPx={sidebarOffsetPx}
         onMobileMenuOpen={() => setMobileOpen(true)}
         notifications={notifications}

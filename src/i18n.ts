@@ -106,6 +106,7 @@ const translations = {
   noScrolls: { en: 'No scrolls found!', hi: 'Koi note nahi mila!' },
   noScrollsSub: { en: 'Create a new vidya scroll to store your knowledge.', hi: 'Naya note daal ke apna gyaan save karo!' },
   deleteScroll: { en: 'Delete Scroll', hi: 'Delete Kar Do 🗑️' },
+  attachments: { en: 'Attachments', hi: 'Files 📎' },
 
   // Achievements
   achievementsTitle: { en: 'Siddhi Hall', hi: 'Trophy Room 🏆' },

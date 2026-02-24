@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { enqueueTasksFullSync } from '../lib/offlineQueue';
 import type { Quest } from '../store';
 
 type TaskRowUpsert = {
@@ -7,6 +8,8 @@ type TaskRowUpsert = {
   quest_id: string;
   title: string;
   done: boolean;
+  xp_reward?: number;
+  completed_at?: string | null;
 };
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -15,17 +18,16 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+function isLikelyNetworkError(msg: string) {
+  const m = msg.toLowerCase();
+  return m.includes('failed to fetch') || m.includes('network') || m.includes('offline') || m.includes('timeout');
+}
+
 /**
  * Syncs the app's Quests into Supabase `tasks` table.
- *
- * Why needed?
- * - Your app's real "tasks" are `quests`.
- * - Earlier we stored the whole app snapshot in `user_state` (JSONB).
- * - This hook additionally writes a simplified view (title + done) into `tasks`.
- *
- * Required DB change (run in Supabase SQL editor once):
- * - Add `quest_id text`
- * - Unique constraint on (user_id, quest_id)
+ * Phase 9 upgrade:
+ * - If offline, queue a "full sync" payload.
+ * - OfflineSyncBootstrap flushes it when back online.
  */
 export function useSupabaseTasksSync(opts: {
   enabled: boolean;
@@ -39,6 +41,7 @@ export function useSupabaseTasksSync(opts: {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [queued, setQueued] = useState(false);
 
   const timerRef = useRef<number | null>(null);
   const lastHashRef = useRef<string>('');
@@ -50,6 +53,8 @@ export function useSupabaseTasksSync(opts: {
       quest_id: String(q.id),
       title: q.title,
       done: q.status === 'completed',
+      xp_reward: (q as any).xpReward ?? 0,
+      completed_at: q.status === 'completed' ? ((q as any).completedAt || null) : null,
     }));
   }, [quests, userId]);
 
@@ -58,12 +63,12 @@ export function useSupabaseTasksSync(opts: {
       setSyncing(false);
       setError(null);
       setLastSyncedAt(null);
+      setQueued(false);
       lastHashRef.current = '';
       if (timerRef.current) window.clearTimeout(timerRef.current);
       return;
     }
 
-    // Debounce changes
     const hash = JSON.stringify(payload);
     if (hash === lastHashRef.current) return;
 
@@ -72,43 +77,39 @@ export function useSupabaseTasksSync(opts: {
     timerRef.current = window.setTimeout(async () => {
       setSyncing(true);
       setError(null);
+      setQueued(false);
+
+      // Offline: queue and exit
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueTasksFullSync({ user_id: userId, tasks: payload });
+        lastHashRef.current = hash;
+        setQueued(true);
+        setSyncing(false);
+        return;
+      }
 
       try {
         // Upsert all current quests
-        const batches = chunk(payload, 200);
-        for (const batch of batches) {
-          const { error: upErr } = await supabase
-            .from('tasks')
-            .upsert(batch, { onConflict: 'user_id,quest_id' });
-
+        for (const batch of chunk(payload, 200)) {
+          const { error: upErr } = await supabase.from('tasks').upsert(batch, { onConflict: 'user_id,quest_id' });
           if (upErr) throw upErr;
         }
 
-        // Delete rows that no longer exist locally (keep table in-sync)
+        // Delete rows that no longer exist locally
         const { data: existing, error: selErr } = await supabase
           .from('tasks')
           .select('quest_id')
           .eq('user_id', userId)
-          .limit(2000);
-
+          .limit(5000);
         if (selErr) throw selErr;
 
-        const existingIds = new Set(
-          ((existing as { quest_id: string }[] | null) ?? []).map((r) => String(r.quest_id))
-        );
+        const existingIds = new Set(((existing as { quest_id: string }[] | null) ?? []).map((r) => String(r.quest_id)));
         const currentIds = new Set(payload.map((p) => p.quest_id));
         const toDelete = [...existingIds].filter((id) => !currentIds.has(id));
 
-        if (toDelete.length > 0) {
-          // Supabase delete with IN list (chunk to stay safe)
-          for (const delBatch of chunk(toDelete, 200)) {
-            const { error: delErr } = await supabase
-              .from('tasks')
-              .delete()
-              .eq('user_id', userId)
-              .in('quest_id', delBatch);
-            if (delErr) throw delErr;
-          }
+        for (const delBatch of chunk(toDelete, 200)) {
+          const { error: delErr } = await supabase.from('tasks').delete().eq('user_id', userId).in('quest_id', delBatch);
+          if (delErr) throw delErr;
         }
 
         lastHashRef.current = hash;
@@ -116,8 +117,13 @@ export function useSupabaseTasksSync(opts: {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
 
-        // Most common beginner issue: DB column not created yet.
-        if (msg.toLowerCase().includes('quest_id') && msg.toLowerCase().includes('does not exist')) {
+        // If it's network-y, queue the latest payload.
+        if (isLikelyNetworkError(msg)) {
+          enqueueTasksFullSync({ user_id: userId, tasks: payload });
+          lastHashRef.current = hash;
+          setQueued(true);
+          setError('Offline: changes queued');
+        } else if (msg.toLowerCase().includes('quest_id') && msg.toLowerCase().includes('does not exist')) {
           setError('DB is missing column "quest_id" in tasks table. Run the SQL patch (Phase 2) in Supabase SQL Editor.');
         } else {
           setError(msg);
@@ -132,5 +138,5 @@ export function useSupabaseTasksSync(opts: {
     };
   }, [enabled, userId, payload, debounceMs]);
 
-  return { syncing, error, lastSyncedAt };
+  return { syncing, error, lastSyncedAt, queued };
 }

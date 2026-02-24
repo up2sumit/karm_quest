@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Download, RefreshCcw, User, Volume2, VolumeX, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 import { CloudInspector } from './CloudInspector';
+import { RemindersPanel } from './RemindersPanel';
 import type { Achievement, Note, Quest, UserStats } from '../store';
 import { questTemplates, type QuestTemplateId } from '../templates/questTemplates';
 
@@ -20,6 +22,8 @@ interface ProfilePageProps {
 
   /** Supabase auth email (if signed in). */
   authEmail?: string | null;
+  /** Supabase auth user id (if signed in). */
+  authUserId?: string | null;
   /** Cloud sync status (if enabled). */
   cloudStatus?: { connected: boolean; saving: boolean; error: string | null };
   onSignOut?: () => void;
@@ -57,11 +61,13 @@ export function ProfilePage({
   onToggleSfx,
   onApplyTemplate,
   authEmail,
+  authUserId,
   cloudStatus,
   onSignOut,
   onCloudSaveProfile,
 }: ProfilePageProps) {
   const { isDark, isHinglish } = useTheme();
+  const offlineSync = useOfflineSync(authUserId ?? null);
 
   const [username, setUsername] = useState(stats.username || 'Yoddha');
   const [avatar, setAvatar] = useState(stats.avatarEmoji || '🧘');
@@ -284,6 +290,29 @@ export function ProfilePage({
               </div>
             ) : null}
 
+            {/* Offline queue (Phase 9) */}
+            {authUserId ? (
+              <div className={`mt-2 text-xs ${ts}`}>
+                Network: {offlineSync.online ? 'Online ✅' : 'Offline ⚠️'}
+                <span className="ml-3">Pending sync: <b>{offlineSync.pending}</b></span>
+                {offlineSync.pending > 0 ? (
+                  <button
+                    onClick={() => void offlineSync.flushNow()}
+                    disabled={!offlineSync.online || offlineSync.flushing}
+                    className={`ml-3 px-2 py-0.5 rounded-lg text-[11px] font-semibold ${
+                      !offlineSync.online || offlineSync.flushing
+                        ? (isDark ? 'bg-white/[0.04] text-slate-500' : 'bg-slate-100 text-slate-400')
+                        : (isHinglish ? 'bg-rose-500/15 text-rose-600' : isDark ? 'bg-indigo-500/15 text-indigo-300' : 'bg-indigo-50 text-indigo-700')
+                    }`}
+                    title={offlineSync.online ? 'Sync queued changes now' : 'Go online to sync'}
+                  >
+                    {offlineSync.flushing ? 'Syncing…' : 'Sync now'}
+                  </button>
+                ) : null}
+                {offlineSync.error ? <span className="ml-2 text-[tomato]">({offlineSync.error})</span> : null}
+              </div>
+            ) : null}
+
             {cloudMsg ? (
               <div className={`mt-2 text-xs ${cloudMsg.includes('failed') ? 'text-[tomato]' : (isHinglish ? 'text-rose-700' : isDark ? 'text-amber-200' : 'text-slate-800')}`}>
                 {cloudMsg}
@@ -331,6 +360,14 @@ export function ProfilePage({
       </div>
 
       <CloudInspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
+
+      {/* Reminders (Phase 7) */}
+      <RemindersPanel
+        enabled={!!authUserId}
+        userId={authUserId ?? null}
+        quests={quests}
+        notes={notes}
+      />
 
       {/* Stats */}
       <div className={`${card} rounded-3xl p-5 md:p-6`}>

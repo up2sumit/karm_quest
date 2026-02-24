@@ -1,14 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { enqueueUserState } from '../lib/offlineQueue';
+
+function isLikelyNetworkError(msg: string) {
+  const m = msg.toLowerCase();
+  return (
+    m.includes('failed to fetch') ||
+    m.includes('network') ||
+    m.includes('fetch') ||
+    m.includes('offline') ||
+    m.includes('timeout')
+  );
+}
 
 /**
  * Stores the entire app snapshot per-user in Supabase (JSONB).
- *
- * Table: user_state
- * Columns: user_id (uuid PK), app_key (text), version (text), snapshot (jsonb), updated_at (timestamptz)
- *
- * RLS:
- *   - user can only select/insert/update where auth.uid() = user_id
+ * Phase 9 upgrade:
+ * - If offline or network fails, we queue the latest snapshot in localStorage.
+ * - When online again, OfflineSyncBootstrap flushes the queue.
  */
 export function useSupabaseUserState<T extends object>(opts: {
   enabled: boolean;
@@ -24,10 +33,6 @@ export function useSupabaseUserState<T extends object>(opts: {
   const debounceMs = opts.debounceMs ?? 900;
 
   // Keep latest snapshot/version in refs for seeding.
-  // IMPORTANT: Do NOT put `snapshot` in the "remote hydrate" effect dependency list.
-  // On app boot, many state updates happen quickly; if `snapshot` is a dependency,
-  // React will cancel the in-flight fetch/seed, and our guard can prevent a re-fetch.
-  // Result: remoteHydrated stays false and nothing is written.
   const latestSnapshotRef = useRef<T>(snapshot);
   const latestVersionRef = useRef<string>(version);
   useEffect(() => {
@@ -38,19 +43,22 @@ export function useSupabaseUserState<T extends object>(opts: {
   const [remoteHydrated, setRemoteHydrated] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queued, setQueued] = useState(false);
 
   const restoreGuard = useRef(false);
   const didFetchKey = useRef<string | null>(null);
   const saveTimer = useRef<number | null>(null);
-  const lastSavedHash = useRef<string>("");
+  const lastSavedHash = useRef<string>('');
 
   const activeKey = useMemo(() => (userId ? `${appKey}:${userId}` : null), [appKey, userId]);
 
+  // Remote hydrate once per user
   useEffect(() => {
     if (!enabled || !userId || !activeKey) {
       setRemoteHydrated(false);
       setSaving(false);
       setError(null);
+      setQueued(false);
       didFetchKey.current = null;
       return;
     }
@@ -64,27 +72,26 @@ export function useSupabaseUserState<T extends object>(opts: {
       setRemoteHydrated(false);
 
       const { data, error: e } = await supabase
-        .from("user_state")
-        .select("version,snapshot")
-        .eq("user_id", userId)
-        .eq("app_key", appKey)
+        .from('user_state')
+        .select('version,snapshot')
+        .eq('user_id', userId)
+        .eq('app_key', appKey)
         .maybeSingle();
 
       if (cancelled) return;
 
       if (e) {
+        // If offline, just continue local-only; queued writes will flush later.
         setError(e.message);
-        setRemoteHydrated(true); // allow local-only to continue
+        setRemoteHydrated(true);
         return;
       }
 
       if (data?.snapshot) {
-        // Restore (even if version differs); your restore() is already defensive.
         restoreGuard.current = true;
         try {
           restore(data.snapshot as T);
         } finally {
-          // release guard in next tick
           setTimeout(() => {
             restoreGuard.current = false;
           }, 0);
@@ -94,14 +101,33 @@ export function useSupabaseUserState<T extends object>(opts: {
         return;
       }
 
-      // First time user: seed remote with current snapshot
+      // First time user: seed remote with current snapshot (or queue if offline)
       const seedSnapshot = latestSnapshotRef.current;
       const seedVersion = latestVersionRef.current;
       const seed = { user_id: userId, app_key: appKey, version: seedVersion, snapshot: seedSnapshot };
-      const { error: insErr } = await supabase.from("user_state").upsert(seed, { onConflict: "user_id,app_key" });
-      if (insErr) setError(insErr.message);
-      lastSavedHash.current = JSON.stringify({ v: seedVersion, s: seedSnapshot });
-      setRemoteHydrated(true);
+
+      try {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          enqueueUserState(seed);
+          setQueued(true);
+          lastSavedHash.current = JSON.stringify({ v: seedVersion, s: seedSnapshot });
+          setRemoteHydrated(true);
+          return;
+        }
+
+        const { error: insErr } = await supabase.from('user_state').upsert(seed, { onConflict: 'user_id,app_key' });
+        if (insErr) throw insErr;
+        lastSavedHash.current = JSON.stringify({ v: seedVersion, s: seedSnapshot });
+        setRemoteHydrated(true);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Queue on network issues
+        enqueueUserState(seed);
+        setQueued(true);
+        setError(isLikelyNetworkError(msg) ? 'Offline: changes queued' : msg);
+        lastSavedHash.current = JSON.stringify({ v: seedVersion, s: seedSnapshot });
+        setRemoteHydrated(true);
+      }
     })();
 
     return () => {
@@ -109,6 +135,7 @@ export function useSupabaseUserState<T extends object>(opts: {
     };
   }, [enabled, userId, appKey, restore, activeKey]);
 
+  // Debounced writes
   useEffect(() => {
     if (!enabled || !userId) return;
     if (!remoteHydrated) return;
@@ -122,20 +149,39 @@ export function useSupabaseUserState<T extends object>(opts: {
     saveTimer.current = window.setTimeout(async () => {
       setSaving(true);
       setError(null);
+      setQueued(false);
 
       const payload = { user_id: userId, app_key: appKey, version, snapshot };
-      const { error: e } = await supabase.from("user_state").upsert(payload, { onConflict: "user_id,app_key" });
 
-      if (e) setError(e.message);
-      else lastSavedHash.current = hash;
+      try {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          enqueueUserState(payload);
+          setQueued(true);
+          lastSavedHash.current = hash; // prevent repeated enqueue spam
+          setSaving(false);
+          return;
+        }
 
-      setSaving(false);
+        const { error: e } = await supabase.from('user_state').upsert(payload, { onConflict: 'user_id,app_key' });
+        if (e) throw e;
+
+        lastSavedHash.current = hash;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Queue latest snapshot (deduped) so it will sync later.
+        enqueueUserState(payload);
+        setQueued(true);
+        lastSavedHash.current = hash;
+        setError(isLikelyNetworkError(msg) ? 'Offline: changes queued' : msg);
+      } finally {
+        setSaving(false);
+      }
     }, debounceMs);
 
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
-  }, [enabled, userId, remoteHydrated, snapshot, version, debounceMs]);
+  }, [enabled, userId, remoteHydrated, snapshot, version, debounceMs, appKey]);
 
-  return { remoteHydrated, saving, error };
+  return { remoteHydrated, saving, error, queued };
 }

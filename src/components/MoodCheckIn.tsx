@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { useMoodLog, type MoodValue } from '../hooks/useMoodLog';
+import { useAuth } from '../context/AuthContext';
+import { useMoodLogUnified, type MoodValue } from '../hooks/useMoodLogUnified';
 
 type Props = {
   /** A simple productivity signal to record alongside the mood check-in. */
@@ -29,7 +30,8 @@ function moodEmoji(m: MoodValue) {
 
 export function MoodCheckIn({ completedToday }: Props) {
   const { isDark, isHinglish } = useTheme();
-  const { entries, todayEntry, setTodayMood } = useMoodLog();
+  const { user } = useAuth();
+  const { entries, todayEntry, setTodayMood, cloud } = useMoodLogUnified();
   const [expanded, setExpanded] = useState(false);
 
   const card = isHinglish
@@ -56,6 +58,9 @@ export function MoodCheckIn({ completedToday }: Props) {
             <span className="text-base">{isHinglish ? '🧠' : '🌿'}</span> {title}
           </h3>
           <p className={`text-[11px] mt-1 ${ts}`}>{subtitle}</p>
+          <p className={`text-[10px] mt-1 ${ts}`}>
+            {user ? (cloud.syncing ? (isHinglish ? '☁️ Sync ho raha…' : '☁️ Syncing…') : (cloud.error ? (isHinglish ? '☁️ Sync error' : '☁️ Sync error') : (isHinglish ? '☁️ Cloud synced' : '☁️ Cloud synced'))) : (isHinglish ? '💾 Local only' : '💾 Local only')}
+          </p>
         </div>
 
         <button
