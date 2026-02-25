@@ -45,10 +45,13 @@ interface TopNavProps {
   onSignOut?: () => void;
 }
 
-const themeOptions: { mode: ThemeMode; icon: string; labelKey: 'themeLight' | 'themeDark' | 'themeHinglish'; desc: string; color: string }[] = [
-  { mode: 'light',    icon: '☀️', labelKey: 'themeLight',    desc: 'Clean & minimal',       color: 'from-slate-200 to-slate-300' },
-  { mode: 'dark',     icon: '🌙', labelKey: 'themeDark',     desc: 'Easy on the eyes',      color: 'from-slate-700 to-slate-800' },
-  { mode: 'hinglish', icon: '🎉', labelKey: 'themeHinglish', desc: 'Desi vibes + Hinglish', color: 'from-rose-400 to-violet-500' },
+const themeOptions: { mode: ThemeMode; icon: string; labelKey: 'themeLight' | 'themeModern' | 'themeDark' | 'themeHinglish'; desc: string; color: string }[] = [
+  { mode: 'light',    icon: '☀️', labelKey: 'themeLight',    desc: 'Clean & minimal',                color: 'from-slate-200 to-slate-300' },
+  { mode: 'modern',   icon: '🗒️', labelKey: 'themeModern',   desc: 'Editorial • professional',       color: 'from-teal-700 to-slate-700' },
+  // Theme 3 (mode: "dark") is Chakra Rings — a LIGHT palette with blue/violet accents.
+  { mode: 'dark',     icon: '🟣', labelKey: 'themeDark',     desc: 'Soft indigo • light',             color: 'from-indigo-500 to-violet-500' },
+  // Theme 4 (mode: "hinglish") is Indigo Dark — a DARK palette (blue/black).
+  { mode: 'hinglish', icon: '🌙', labelKey: 'themeHinglish', desc: 'Indigo dark • night mode',        color: 'from-slate-900 to-indigo-950' },
 ];
 
 const typeAccent: Record<NotificationType, { dot: string; unreadBg: string; unreadBgDark: string }> = {
@@ -99,7 +102,7 @@ function NotificationPanel({ notifications, isDark, isHinglish, onMarkRead, onMa
 }) {
   const unread = notifications.filter(n => !n.read).length;
   const panelBg = isHinglish
-    ? 'bg-white border border-rose-200/40'
+    ? 'bg-white border border-indigo-200/40'
     : isDark ? 'bg-[#13132A] border border-white/[0.08]' : 'bg-white border border-slate-200/70';
   const tp = isDark ? 'text-slate-200' : 'text-slate-800';
   const ts = isDark ? 'text-slate-500' : 'text-slate-400';
@@ -110,10 +113,10 @@ function NotificationPanel({ notifications, isDark, isHinglish, onMarkRead, onMa
       {/* Header */}
       <div className={`flex items-center justify-between px-4 py-3 border-b ${divider}`}>
         <div className="flex items-center gap-2">
-          <Bell size={14} className={isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+          <Bell size={14} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
           <span className={`text-[13px] font-bold ${tp}`}>Notifications</span>
           {unread > 0 && (
-            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black text-white ${isHinglish ? 'bg-rose-500' : 'bg-indigo-500'}`}>
+            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black text-white ${isHinglish ? 'bg-indigo-500' : 'bg-indigo-500'}`}>
               {unread}
             </span>
           )}
@@ -258,7 +261,7 @@ function SearchPanel({
   onClose: () => void;
 }) {
   const panelBg = isHinglish
-    ? 'bg-white border border-rose-200/40'
+    ? 'bg-white border border-indigo-200/40'
     : isDark ? 'bg-[#13132A] border border-white/[0.08]' : 'bg-white border border-slate-200/70';
   const tp = isDark ? 'text-slate-200' : 'text-slate-800';
   const ts = isDark ? 'text-slate-500' : 'text-slate-500';
@@ -268,7 +271,7 @@ function SearchPanel({
     <div className={`absolute left-0 top-full mt-2 w-[420px] max-w-[calc(100vw-16px)] rounded-2xl shadow-2xl overflow-hidden animate-slide-up z-50 backdrop-blur-xl ${panelBg}`}>
       <div className={`flex items-center justify-between px-4 py-3 border-b ${divider}`}>
         <div className="flex items-center gap-2">
-          <Search size={14} className={isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+          <Search size={14} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
           <span className={`text-[13px] font-bold ${tp}`}>Search</span>
           <span className={`text-[10px] font-semibold ${ts}`}>“{query.trim()}”</span>
         </div>
@@ -299,14 +302,14 @@ function SearchPanel({
                   <p className={`text-[12.5px] font-semibold truncate ${tp}`}>{r.title}</p>
                   <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-full ${
                     r.kind === 'quest'
-                      ? isHinglish ? 'bg-rose-500/10 text-rose-600' : isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'
+                      ? isHinglish ? 'bg-indigo-500/10 text-indigo-600' : isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'
                       : isHinglish ? 'bg-violet-500/10 text-violet-600' : isDark ? 'bg-violet-500/10 text-violet-400' : 'bg-violet-50 text-violet-600'
                   }`}>{r.kind === 'quest' ? 'Quest' : 'Note'}</span>
                 </div>
                 <p className={`text-[11px] mt-0.5 truncate ${ts}`}>{r.meta}</p>
               </div>
               {r.kind === 'quest'
-                ? <Swords size={14} className={isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+                ? <Swords size={14} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
                 : <FileText size={14} className={isHinglish ? 'text-violet-500' : isDark ? 'text-violet-400' : 'text-violet-500'} />}
             </button>
           ))
@@ -343,7 +346,7 @@ export function TopNav({
   onOpenAuth,
   onSignOut,
 }: TopNavProps) {
-  const { theme, isDark, isHinglish, lang, setTheme } = useTheme();
+  const { theme, isDark, isHinglish, isModern, lang, setTheme } = useTheme();
 
   // Boost timer (ticks only when active)
   const boostActive = isBoostActive(xpBoost);
@@ -407,23 +410,29 @@ export function TopNav({
     return () => document.removeEventListener('keydown', onKey);
   }, [closeSearch]);
 
-  const bg = isHinglish
-    ? 'bg-white/60 backdrop-blur-xl border border-rose-200/20'
-    : isDark ? 'bg-[#12121F]/80 backdrop-blur-xl border border-white/[0.04]'
-             : 'bg-white/70 backdrop-blur-xl border border-slate-200/50';
+  const bg = isModern
+    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_0_rgba(0,0,0,0.04)]'
+    : isHinglish
+      ? 'bg-white/60 backdrop-blur-xl border border-indigo-200/20'
+      : isDark ? 'bg-[#12121F]/80 backdrop-blur-xl border border-white/[0.04]'
+               : 'bg-white/70 backdrop-blur-xl border border-slate-200/50';
 
-  const inputBg = isHinglish
-    ? 'bg-white/60 border border-rose-200/30 text-slate-800 placeholder:text-slate-400 focus:ring-rose-300/30 focus:border-rose-300'
-    : isDark
-      ? 'bg-white/[0.04] border border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20 focus:border-indigo-500/30'
-      : 'bg-slate-50/80 border border-slate-200/60 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-400/20 focus:border-indigo-300';
+  const inputBg = isModern
+    ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] placeholder:text-[var(--kq-text-muted)] focus:ring-[var(--kq-primary)]/20 focus:border-[var(--kq-border2)]'
+    : isHinglish
+      ? 'bg-white/60 border border-indigo-200/30 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30 focus:border-indigo-300'
+      : isDark
+        ? 'bg-white/[0.04] border border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20 focus:border-indigo-500/30'
+        : 'bg-slate-50/80 border border-slate-200/60 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-400/20 focus:border-indigo-300';
 
-  const tl  = isHinglish ? 'text-slate-700' : isDark ? 'text-slate-400' : 'text-slate-600';
-  const acc = isHinglish ? 'text-rose-500'  : isDark ? 'text-indigo-400' : 'text-indigo-500';
-  const ib  = isHinglish
-    ? 'bg-white/50 border border-rose-200/30 hover:bg-white/80'
-    : isDark ? 'bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06]'
-             : 'bg-slate-50 border border-slate-200/40 hover:bg-slate-100';
+  const tl  = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-700' : isDark ? 'text-slate-400' : 'text-slate-600';
+  const acc = isModern ? 'text-[var(--kq-primary)]'        : isHinglish ? 'text-indigo-500'  : isDark ? 'text-indigo-400' : 'text-indigo-500';
+  const ib  = isModern
+    ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] hover:bg-[var(--kq-bg3)]'
+    : isHinglish
+      ? 'bg-white/50 border border-indigo-200/30 hover:bg-white/80'
+      : isDark ? 'bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06]'
+               : 'bg-slate-50 border border-slate-200/40 hover:bg-slate-100';
 
   return (
     <header
@@ -440,7 +449,7 @@ export function TopNav({
 
         {/* Mini brand — mobile only */}
         <div className="flex md:hidden items-center gap-1.5 shrink-0">
-          <span className="text-base">{isHinglish ? '🎉' : '🪔'}</span>
+          <span className="text-base">{isHinglish ? '🎉' : isModern ? '🗒️' : '🪔'}</span>
           <span className={`text-[13px] font-black ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>KQ</span>
         </div>
 
@@ -482,8 +491,14 @@ export function TopNav({
             <span className={`text-[11px] font-semibold ${tl} whitespace-nowrap`}>{t('levelLabel', lang)} {stats.level}</span>
           </div>
           <div className="flex-1 relative min-w-[50px]">
-            <div className={`h-3 rounded-full overflow-hidden ${isHinglish ? 'bg-rose-100/50' : isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
-              <div className={`h-full rounded-full animate-xp-fill transition-all duration-500 ${isHinglish ? 'bg-gradient-to-r from-rose-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'}`}
+            <div className={`h-3 rounded-full overflow-hidden ${isHinglish ? 'bg-indigo-100/50' : isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
+              <div className={`h-full rounded-full animate-xp-fill transition-all duration-500 ${
+                isModern
+                  ? 'bg-[var(--kq-primary)]'
+                  : isHinglish
+                    ? 'bg-gradient-to-r from-indigo-400 to-violet-400'
+                    : 'bg-gradient-to-r from-indigo-500 to-violet-500'
+              }`}
                 style={{ width: `${xpPercent}%` }} />
             </div>
             <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{stats.xp}/{stats.xpToNext}</span>
@@ -558,14 +573,23 @@ export function TopNav({
         {/* Theme selector */}
         <div className="relative shrink-0" ref={themeRef}>
           <button onClick={() => { setShowThemeMenu(v => !v); setShowNotifPanel(false); }}
-            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border transition-all ${isHinglish ? 'bg-rose-50/60 border-rose-200/30 hover:bg-rose-100/60' : isDark ? 'bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]' : 'bg-slate-50 border-slate-200/40 hover:bg-slate-100'}`}>
+            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border transition-all ${isHinglish ? 'bg-indigo-50/60 border-indigo-200/30 hover:bg-indigo-100/60' : isDark ? 'bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]' : 'bg-slate-50 border-slate-200/40 hover:bg-slate-100'}`}>
             {theme === 'light'    && <Sun     size={15} className="text-slate-500" />}
+            {theme === 'modern'   && <FileText size={15} className="text-[var(--kq-primary)]" />}
             {theme === 'dark'     && <Moon    size={15} className="text-slate-400" />}
-            {theme === 'hinglish' && <Palette size={15} className="text-rose-400" />}
+            {theme === 'hinglish' && <Palette size={15} className="text-indigo-400" />}
             <ChevronDown size={11} className={`transition-transform ${showThemeMenu ? 'rotate-180' : ''} ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
           </button>
           {showThemeMenu && (
-            <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl p-1.5 shadow-xl border animate-slide-up z-50 ${isHinglish ? 'bg-white/95 backdrop-blur-xl border-rose-200/30' : isDark ? 'bg-[#1A1A2E] border-white/[0.06] backdrop-blur-xl' : 'bg-white border-slate-200/50 backdrop-blur-xl'}`}>
+            <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl p-1.5 shadow-xl border animate-slide-up z-50 ${
+              isModern
+                ? 'bg-[var(--kq-surface)] border-[var(--kq-border)]'
+                : isHinglish
+                  ? 'bg-white/95 backdrop-blur-xl border-indigo-200/30'
+                  : isDark
+                    ? 'bg-[#1A1A2E] border-white/[0.06] backdrop-blur-xl'
+                    : 'bg-white border-slate-200/50 backdrop-blur-xl'
+            }`}>
               <p className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Theme</p>
               {themeOptions.map(opt => (
                 <button key={opt.mode} onClick={() => {
@@ -579,7 +603,7 @@ export function TopNav({
                     <p className={`text-[13px] font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{t(opt.labelKey, lang)}</p>
                     <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{opt.desc}</p>
                   </div>
-                  {theme === opt.mode && <span className={`text-xs ${isHinglish ? 'text-rose-400' : 'text-indigo-400'}`}>✓</span>}
+                  {theme === opt.mode && <span className={`text-xs ${isModern ? 'text-[var(--kq-primary)]' : isHinglish ? 'text-indigo-400' : 'text-indigo-400'}`}>✓</span>}
                 </button>
               ))}
             </div>
@@ -591,9 +615,9 @@ export function TopNav({
           <button onClick={() => { setShowNotifPanel(v => !v); setShowThemeMenu(false); }}
             aria-label={`${unreadCount} unread notifications`}
             className={`relative p-2 rounded-lg border transition-all ${ib} ${showNotifPanel ? isDark ? 'bg-white/[0.08] border-indigo-500/30' : 'bg-indigo-50 border-indigo-200/60' : ''}`}>
-            <Bell size={16} className={unreadCount > 0 ? isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-500' : isDark ? 'text-slate-400' : 'text-slate-500'} />
+            <Bell size={16} className={unreadCount > 0 ? isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-500' : isDark ? 'text-slate-400' : 'text-slate-500'} />
             {unreadCount > 0 && (
-              <span className={`absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full text-[9px] text-white font-black flex items-center justify-center ${isHinglish ? 'bg-rose-500' : 'bg-red-500'}`}>
+              <span className={`absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full text-[9px] text-white font-black flex items-center justify-center ${isHinglish ? 'bg-indigo-500' : 'bg-red-500'}`}>
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}

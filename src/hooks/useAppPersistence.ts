@@ -17,19 +17,22 @@ export function useAppPersistence<T extends object>(opts: {
 }) {
   const STORAGE_KEY = opts.key ?? 'karmquest-app-state';
   const APP_VERSION = opts.version ?? '1.0.0';
+  const marker = `${STORAGE_KEY}::${APP_VERSION}`;
 
   // Prevent "save defaults" from overwriting a user's stored state on first boot.
   // Also prevents double-restore in React Strict Mode.
-  const [hydrated, setHydrated] = useState(false);
+  //
+  // IMPORTANT: `hydrated` must flip to false *immediately* when STORAGE_KEY/APP_VERSION changes,
+  // otherwise one render can mistakenly treat the previous key as hydrated.
+  const [hydratedMarker, setHydratedMarker] = useState<string | null>(null);
+  const hydrated = hydratedMarker === marker;
+
   const restoredMarkerRef = useRef<string | null>(null);
 
   // Restore state when key/version changes
   useEffect(() => {
-    const marker = `${STORAGE_KEY}::${APP_VERSION}`;
     if (restoredMarkerRef.current === marker) return;
     restoredMarkerRef.current = marker;
-
-    setHydrated(false);
 
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -42,10 +45,10 @@ export function useAppPersistence<T extends object>(opts: {
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     } finally {
-      setHydrated(true);
+      setHydratedMarker(marker);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [STORAGE_KEY, APP_VERSION]);
+  }, [marker]);
 
   // Save state on change
   useEffect(() => {

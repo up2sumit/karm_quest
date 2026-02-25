@@ -21,6 +21,7 @@ function iconFor(eventType: string) {
 
 export function ActivityPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { isDark, isHinglish } = useTheme();
+  const darkLike = isDark || isHinglish;
 
   const {
     rows: rawRows,
@@ -45,20 +46,16 @@ export function ActivityPanel({ open, onClose }: { open: boolean; onClose: () =>
     return ['all', ...Array.from(set).sort()];
   }, [rows]);
 
-  const card = isHinglish
-    ? 'bg-white/85 backdrop-blur-xl border border-rose-200/30 shadow-2xl'
-    : isDark
-      ? 'bg-[#0C0C1A]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl'
-      : 'bg-white/90 backdrop-blur-xl border border-slate-200/60 shadow-2xl';
+  const card = darkLike
+    ? 'bg-[#0C0C1A]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl'
+    : 'bg-white/90 backdrop-blur-xl border border-slate-200/60 shadow-2xl';
 
-  const tp = isHinglish ? 'text-slate-900' : isDark ? 'text-slate-100' : 'text-slate-900';
-  const ts = isHinglish ? 'text-slate-600' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const tp = darkLike ? 'text-slate-100' : 'text-slate-900';
+  const ts = darkLike ? 'text-slate-400' : 'text-slate-500';
 
-  const btnSoft = isHinglish
-    ? 'bg-white/80 border border-rose-200/40 hover:bg-white'
-    : isDark
-      ? 'bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06]'
-      : 'bg-white/80 border border-slate-200/70 hover:bg-white';
+  const btnSoft = darkLike
+    ? 'bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06]'
+    : 'bg-white/80 border border-slate-200/70 hover:bg-white';
 
   const portalTarget = typeof document !== 'undefined' ? document.body : null;
   if (!open || !portalTarget) return null;
@@ -143,7 +140,7 @@ export function ActivityPanel({ open, onClose }: { open: boolean; onClose: () =>
               onChange={(e) => setFilter(e.target.value)}
               className={`px-3 py-2 rounded-xl text-[13px] outline-none ${
                 isHinglish
-                  ? 'bg-white/80 border border-rose-200/40 text-slate-900'
+                  ? 'bg-white/80 border border-indigo-200/40 text-slate-900'
                   : isDark
                     ? 'bg-white/[0.03] border border-white/[0.08] text-slate-100'
                     : 'bg-white/80 border border-slate-200/70 text-slate-900'
@@ -201,7 +198,7 @@ export function ActivityPanel({ open, onClose }: { open: boolean; onClose: () =>
                         className={
                           copiedId === r.id
                             ? isHinglish
-                              ? 'text-rose-600'
+                              ? 'text-indigo-600'
                               : isDark
                                 ? 'text-indigo-300'
                                 : 'text-indigo-600'

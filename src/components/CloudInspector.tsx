@@ -59,7 +59,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
 
   const card = useMemo(() => {
     return isHinglish
-      ? 'bg-white/85 backdrop-blur-xl border border-rose-200/30 shadow-2xl'
+      ? 'bg-white/85 backdrop-blur-xl border border-indigo-200/30 shadow-2xl'
       : isDark
         ? 'bg-[#0C0C1A]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl'
         : 'bg-white/90 backdrop-blur-xl border border-slate-200/60 shadow-2xl';
@@ -68,7 +68,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
   const tp = isHinglish ? 'text-slate-900' : isDark ? 'text-slate-100' : 'text-slate-900';
   const ts = isHinglish ? 'text-slate-600' : isDark ? 'text-slate-400' : 'text-slate-500';
   const btnSoft = isHinglish
-    ? 'bg-white/80 border border-rose-200/40 hover:bg-white'
+    ? 'bg-white/80 border border-indigo-200/40 hover:bg-white'
     : isDark
       ? 'bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06]'
       : 'bg-white/80 border border-slate-200/70 hover:bg-white';
@@ -242,7 +242,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
               className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
                 tab === 'user_state'
                   ? isHinglish
-                    ? 'bg-rose-500 text-white'
+                    ? 'bg-indigo-500 text-white'
                     : isDark
                       ? 'bg-indigo-500 text-white'
                       : 'bg-indigo-600 text-white'
@@ -256,7 +256,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
               className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
                 tab === 'tasks'
                   ? isHinglish
-                    ? 'bg-rose-500 text-white'
+                    ? 'bg-indigo-500 text-white'
                     : isDark
                       ? 'bg-indigo-500 text-white'
                       : 'bg-indigo-600 text-white'
@@ -270,7 +270,7 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
               className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
                 tab === 'attachments'
                   ? isHinglish
-                    ? 'bg-rose-500 text-white'
+                    ? 'bg-indigo-500 text-white'
                     : isDark
                       ? 'bg-indigo-500 text-white'
                       : 'bg-indigo-600 text-white'

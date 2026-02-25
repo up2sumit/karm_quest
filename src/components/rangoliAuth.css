@@ -1,0 +1,561 @@
+/* Rangoli Auth UI (scoped to .kq-auth)
+   Inspired by organe_SignIn.html reference.
+*/
+
+.kq-auth {
+  --bg: #1a0a00;
+  --card: #ffffff;
+  --ink: #1a0a00;
+  --muted: #8a6040;
+  --saffron: #ff6b00;
+  --turmeric: #ffb800;
+  --crimson: #cc1a00;
+  --teal: #006b5a;
+  --indigo: #1a0088;
+  --pink: #cc006b;
+  --border: #ffd180;
+  --shadow: rgba(26, 10, 0, 0.25);
+
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.kq-badge {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 184, 0, 0.15);
+  border: 1px solid rgba(255, 184, 0, 0.5);
+  border-radius: 999px;
+  padding: 0.25rem 0.9rem;
+  font-family: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.62rem;
+  color: var(--turmeric);
+  letter-spacing: 0.12em;
+  z-index: 50;
+  white-space: nowrap;
+}
+
+.kq-rangoli-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kq-rangoli-svg {
+  width: min(700px, 100vw);
+  opacity: 0.18;
+  animation: kq-rotate-rangoli 60s linear infinite;
+}
+
+@keyframes kq-rotate-rangoli {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.kq-card-wrap {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 420px;
+}
+
+.kq-tape-top {
+  height: 6px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(
+    90deg,
+    var(--crimson),
+    var(--saffron),
+    var(--turmeric),
+    var(--teal),
+    var(--indigo),
+    var(--pink),
+    var(--crimson)
+  );
+  background-size: 200%;
+  animation: kq-tape-scroll 4s linear infinite;
+}
+
+@keyframes kq-tape-scroll {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.kq-card {
+  background: var(--card);
+  border-radius: 0 0 20px 20px;
+  padding: 2.5rem 2.25rem 2rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 184, 0, 0.2);
+  position: relative;
+}
+
+.kq-corner {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-color: var(--saffron);
+  border-style: solid;
+  opacity: 0.6;
+}
+.kq-c-tl {
+  top: 6px;
+  left: 0;
+  border-width: 3px 0 0 3px;
+  border-radius: 4px 0 0 0;
+}
+.kq-c-tr {
+  top: 6px;
+  right: 0;
+  border-width: 3px 3px 0 0;
+  border-radius: 0 4px 0 0;
+}
+.kq-c-bl {
+  bottom: 0;
+  left: 0;
+  border-width: 0 0 3px 3px;
+  border-radius: 0 0 0 4px;
+}
+.kq-c-br {
+  bottom: 0;
+  right: 0;
+  border-width: 0 3px 3px 0;
+  border-radius: 0 0 4px 0;
+}
+
+.kq-brand {
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.kq-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 0.25rem;
+}
+
+.kq-brand-icon {
+  font-size: 2rem;
+}
+
+.kq-brand-name {
+  font-family: 'Yatra One', ui-serif, Georgia, serif;
+  font-size: 2rem;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.kq-brand-tag {
+  font-family: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.6rem;
+  color: var(--muted);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.kq-rangoli-div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.kq-rd-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+.kq-rd-gem {
+  font-size: 0.8rem;
+}
+
+.kq-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 2px solid #f5e8d0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 1.75rem;
+}
+
+.kq-tab {
+  padding: 0.65rem;
+  border: none;
+  background: transparent;
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.kq-tab:first-child {
+  border-right: 2px solid #f5e8d0;
+}
+
+.kq-tab.on {
+  background: var(--saffron);
+  color: #fff;
+  font-weight: 800;
+}
+
+.kq-fw {
+  position: relative;
+  min-height: 330px;
+}
+
+.kq-pane {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.kq-pane.off {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  transform: translateY(8px);
+}
+
+.kq-pane.on {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.kq-step-title {
+  font-family: 'Yatra One', ui-serif, Georgia, serif;
+  font-size: 1.3rem;
+  color: var(--ink);
+  margin-bottom: 0.25rem;
+}
+
+.kq-step-sub {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 1.4rem;
+  line-height: 1.5;
+}
+
+.kq-ig {
+  margin-bottom: 0.9rem;
+}
+
+.kq-il {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.kq-iw {
+  position: relative;
+}
+
+.kq-ii {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.9rem;
+}
+
+.kq-input {
+  width: 100%;
+  padding: 0.72rem 1rem 0.72rem 2.5rem;
+  background: #fffaf5;
+  border: 2px solid #f5e8d0;
+  border-radius: 10px;
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 0.9rem;
+  color: var(--ink);
+  outline: none;
+  transition: all 0.25s;
+}
+
+.kq-input:focus {
+  border-color: var(--saffron);
+  background: #fff8f0;
+  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.1);
+}
+
+.kq-input::placeholder {
+  color: #cdbba0;
+}
+
+.kq-str-row {
+  display: flex;
+  gap: 3px;
+  margin-top: 0.4rem;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.kq-str-b {
+  flex: 1;
+  background: #f0e4d0;
+  transition: all 0.3s;
+  border-radius: 2px;
+}
+
+.kq-str-b.s1 {
+  background: var(--crimson);
+}
+.kq-str-b.s2 {
+  background: var(--saffron);
+}
+.kq-str-b.s3 {
+  background: var(--turmeric);
+}
+.kq-str-b.s4 {
+  background: var(--teal);
+}
+
+.kq-av-g {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.kq-av {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid #f0e4d0;
+  background: #fff8f0;
+  font-size: 1.3rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.kq-av:hover {
+  transform: scale(1.1);
+  border-color: var(--saffron);
+}
+
+.kq-av.s {
+  border-color: var(--saffron);
+  background: #fff0e0;
+  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.15);
+}
+
+.kq-cta {
+  width: 100%;
+  margin-top: 1.2rem;
+  padding: 0.85rem;
+  background: var(--saffron);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(255, 107, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s;
+}
+
+.kq-cta:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kq-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.5s;
+}
+
+.kq-cta:hover::before {
+  transform: translateX(100%);
+}
+
+.kq-cta:active {
+  transform: scale(0.98);
+}
+
+.kq-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.8rem 0;
+  font-size: 0.72rem;
+  color: #cdbba0;
+}
+
+.kq-divider::before,
+.kq-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #f0e4d0;
+}
+
+.kq-g-btn {
+  width: 100%;
+  padding: 0.7rem;
+  border: 2px solid #f0e4d0;
+  border-radius: 10px;
+  background: #fffaf5;
+  color: var(--muted);
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+}
+
+.kq-g-btn:hover {
+  border-color: var(--border);
+  color: var(--ink);
+}
+
+.kq-swl {
+  text-align: center;
+  margin-top: 0.9rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.kq-swl a {
+  color: var(--saffron);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.kq-link {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.kq-msg {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.kq-msg.warn {
+  color: #7a2f00;
+}
+
+@media (max-width: 420px) {
+  .kq-card {
+    padding: 2.1rem 1.5rem 1.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kq-rangoli-svg,
+  .kq-tape-top {
+    animation: none !important;
+  }
+}
+
+
+/* ── Modern theme override (Field Notes) ────────────────────────────────── */
+html[data-kq-theme="modern"] .kq-auth {
+  --bg: var(--kq-bg);
+  --card: var(--kq-surface);
+  --ink: var(--kq-text-primary);
+  --muted: var(--kq-text-secondary);
+  --border: rgba(36,36,36,0.12);
+  --shadow: rgba(0,0,0,0.08);
+
+  background: var(--kq-bg);
+  font-family: var(--kq-font-body, 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
+}
+
+html[data-kq-theme="modern"] .kq-badge {
+  background: rgba(31,94,90,0.10);
+  border-color: rgba(31,94,90,0.25);
+  color: var(--kq-primary);
+}
+
+html[data-kq-theme="modern"] .kq-rangoli-bg,
+html[data-kq-theme="modern"] .kq-rangoli-div {
+  display: none;
+}
+
+html[data-kq-theme="modern"] .kq-tape-top {
+  background: var(--kq-primary);
+  animation: none;
+}
+
+html[data-kq-theme="modern"] .kq-card {
+  border-radius: 20px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.10), 0 0 0 1px rgba(36,36,36,0.10);
+}
+
+html[data-kq-theme="modern"] .kq-corner {
+  display: none;
+}
+
+html[data-kq-theme="modern"] .kq-brand-name {
+  font-family: var(--kq-font-display, 'Source Serif 4', Georgia, serif);
+  letter-spacing: -0.01em;
+}
+
+html[data-kq-theme="modern"] .kq-brand-icon {
+  filter: none;
+}
+
+html[data-kq-theme="modern"] .kq-tabs {
+  border: 1px solid rgba(36,36,36,0.12);
+}
+
+html[data-kq-theme="modern"] .kq-tab {
+  font-family: var(--kq-font-body, 'Inter', system-ui, sans-serif);
+}
+
+html[data-kq-theme="modern"] .kq-tab.on {
+  background: rgba(31,94,90,0.10);
+  border-color: rgba(31,94,90,0.25);
+  color: var(--kq-text-primary);
+}
+
+html[data-kq-theme="modern"] .kq-input {
+  border-color: rgba(36,36,36,0.12);
+}
+
+html[data-kq-theme="modern"] .kq-btn.primary {
+  background: var(--kq-primary);
+}
+
+html[data-kq-theme="modern"] .kq-btn.primary:hover {
+  background: var(--kq-primary-light);
+}

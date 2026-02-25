@@ -5,7 +5,7 @@ import { t } from '../i18n';
 import type { Quest, Difficulty, Recurrence, SubTask, FocusSession } from '../store';
 import { difficultyConfig as defaultDiffConfig, parseDueDate, dueDateSortKey, todayISO } from '../store';
 
-import { formatMs, titleBadgeMeta, titleBadgePillClass } from '../shop';
+import { formatMs, titleBadgeMetaForTheme, titleBadgePillClass } from '../shop';
 
 import { QuestCalendar } from './QuestCalendar';
 
@@ -24,7 +24,7 @@ interface QuestBoardProps {
   // Focus Timer
   focusSession: FocusSession | null;
   focusNowMs: number;
-  onStartFocus: (questId: string) => void;
+  onStartFocus: (questId: string, opts?: { durationMs?: number; label?: string }) => void;
   onStopFocus: (reason?: string) => void;
 }
 
@@ -45,7 +45,7 @@ function DueDateBadge({
   dueDate: string;
   isDark: boolean;
   isHinglish: boolean;
-  lang: 'en' | 'hi';
+  lang: import('../i18n').Lang;
   isCompleted: boolean;
 }) {
   const { label, isOverdue, isDueToday, isDueSoon } = parseDueDate(dueDate);
@@ -72,7 +72,7 @@ function DueDateBadge({
   if (isDueToday) {
     return (
       <span className={`text-[10px] flex items-center gap-1 font-semibold ${
-        isHinglish ? 'text-rose-500' : isDark ? 'text-amber-400' : 'text-amber-600'
+        isHinglish ? 'text-indigo-500' : isDark ? 'text-amber-400' : 'text-amber-600'
       }`}>
         <Clock size={10} />
         {label}
@@ -104,7 +104,7 @@ function DueDateBadge({
 // QuestBoard
 // ─────────────────────────────────────────────────────────────────────────────
 export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, searchQuery = '', focusQuestId, onFocusHandled, focusSession, focusNowMs, onStartFocus, onStopFocus }: QuestBoardProps) {
-  const { isDark, isHinglish, lang, theme } = useTheme();
+  const { isDark, isHinglish, isModern, lang, theme } = useTheme();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
@@ -122,6 +122,38 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
   const [completedAnimation, setCompletedAnimation] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [subtaskDraft, setSubtaskDraft] = useState<string>('');
+
+  // Focus duration preset (configurable Pomodoro lengths)
+  const focusPresets = useMemo(
+    () => [
+      { id: 'sprint', label: 'Sprint', minutes: 5 },
+      { id: 'quick', label: 'Quick Focus', minutes: 15 },
+      { id: 'pomodoro', label: 'Pomodoro', minutes: 25 },
+      { id: 'deep', label: 'Deep Work', minutes: 50 },
+      { id: 'flow', label: 'Flow State', minutes: 90 },
+    ].map((p) => ({ ...p, durationMs: p.minutes * 60_000 })),
+    []
+  );
+
+  const [focusPresetId, setFocusPresetId] = useState<string>(() => {
+    try {
+      return localStorage.getItem('kq_focus_preset_v1') || 'pomodoro';
+    } catch {
+      return 'pomodoro';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kq_focus_preset_v1', focusPresetId);
+    } catch {
+      // ignore
+    }
+  }, [focusPresetId]);
+
+  const focusPreset = useMemo(() => {
+    return focusPresets.find((p) => p.id === focusPresetId) || focusPresets.find((p) => p.id === 'pomodoro')!;
+  }, [focusPresets, focusPresetId]);
 
   // Edit modal drafts
   const [editTitle, setEditTitle] = useState('');
@@ -225,21 +257,27 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
   };
 
   // ── Theme-aware class groups ──────────────────────────────────────────────
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const inputCls = isHinglish
-    ? 'bg-white/60 border-rose-200/30 text-slate-800 placeholder:text-slate-400 focus:ring-rose-300/30'
-    : isDark
-      ? 'bg-white/[0.03] border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20'
-      : 'bg-slate-50/80 border-slate-200/50 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30';
-  const btnGradient = isHinglish
-    ? 'bg-gradient-to-r from-rose-500 to-violet-500'
-    : 'bg-gradient-to-r from-indigo-500 to-violet-500';
+  const card = isModern
+    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_1px_rgba(0,0,0,0.04)]'
+    : isHinglish
+      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
+      : isDark
+        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
+        : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+  const tp = isModern ? 'text-[var(--kq-text-primary)]' : isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
+  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const inputCls = isModern
+    ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)] placeholder:text-[var(--kq-text-muted)] focus:ring-[var(--kq-primary)]/20'
+    : isHinglish
+      ? 'bg-white/60 border-indigo-200/30 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30'
+      : isDark
+        ? 'bg-white/[0.03] border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20'
+        : 'bg-slate-50/80 border-slate-200/50 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30';
+  const btnGradient = isModern
+    ? 'bg-[var(--kq-primary)] hover:bg-[var(--kq-primary-light)]'
+    : isHinglish
+      ? 'bg-gradient-to-r from-indigo-500 to-violet-500'
+      : 'bg-gradient-to-r from-indigo-500 to-violet-500';
 
   // ── Quest buckets ──────────────────────────────────────────────────────────
   const visibleQuests = useMemo(() => {
@@ -400,7 +438,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
           <div
             className={`w-full max-w-2xl rounded-2xl shadow-2xl p-5 border ${
               isHinglish
-                ? 'bg-white/90 border-rose-200/40'
+                ? 'bg-white/90 border-indigo-200/40'
                 : isDark
                   ? 'bg-[#16162A] border-white/[0.08]'
                   : 'bg-white border-slate-200/60'
@@ -410,7 +448,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className={`text-[14px] font-bold ${tp} flex items-center gap-2`}>
-                  <Pencil size={16} className={isHinglish ? 'text-rose-500' : 'text-indigo-400'} />
+                  <Pencil size={16} className={isHinglish ? 'text-indigo-500' : 'text-indigo-400'} />
                   Edit Quest
                 </div>
                 <div className={`text-[12px] mt-1 ${ts}`}>
@@ -532,7 +570,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
                     className={`w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
                   >
                     {badgeOptions.map((b) => {
-                      const meta = titleBadgeMeta(b);
+                      const meta = titleBadgeMetaForTheme(b, theme);
                       const label = b === 'none' ? 'None' : `${meta.emoji} ${meta.label}`;
                       return (
                         <option key={b} value={b}>
@@ -596,7 +634,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
                 onClick={closeEdit}
                 className={`px-4 py-2 rounded-xl text-[12px] font-semibold ${
                   isHinglish
-                    ? 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/15'
+                    ? 'bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/15'
                     : isDark
                       ? 'bg-white/[0.06] text-slate-200 hover:bg-white/[0.08]'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -678,6 +716,22 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
             </button>
           </div>
 
+          {/* Focus duration preset */}
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+            isDark ? 'bg-white/[0.02] border-white/[0.05]' : 'bg-slate-50 border-slate-200/40'
+          }`} title="Focus duration">
+            <span className="text-sm">⏱️</span>
+            <select
+              value={focusPresetId}
+              onChange={(e) => setFocusPresetId(e.target.value)}
+              className={`text-[12px] font-semibold bg-transparent outline-none ${isDark ? 'text-slate-200' : 'text-slate-700'}`}
+            >
+              {focusPresets.map((p) => (
+                <option key={p.id} value={p.id}>{p.label} · {p.minutes}m</option>
+              ))}
+            </select>
+          </div>
+
           {/* New Quest button */}
           <button
             onClick={() => setShowForm(true)}
@@ -717,10 +771,10 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
       {/* ── Add Quest Form ───────────────────────────────────────────────────── */}
       {showForm && (
         <div className={`${card} rounded-2xl p-5 animate-slide-up border ${
-          isHinglish ? 'border-rose-300/30' : isDark ? 'border-indigo-500/15' : 'border-indigo-200/40'
+          isHinglish ? 'border-indigo-300/30' : isDark ? 'border-indigo-500/15' : 'border-indigo-200/40'
         }`}>
           <h3 className={`text-sm font-semibold ${tp} mb-3 flex items-center gap-2`}>
-            <Sparkles size={15} className={isHinglish ? 'text-rose-400' : 'text-indigo-400'} />
+            <Sparkles size={15} className={isHinglish ? 'text-indigo-400' : 'text-indigo-400'} />
             {t('createNewQuest', lang)}
           </h3>
           <div className="space-y-3">
@@ -799,14 +853,14 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
             </div>
 
             {/* ── Power Fields (Recurring / Badge / Checklist) ─────────────── */}
-            <div className={`rounded-xl border p-3 ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : isHinglish ? 'bg-rose-50/60 border-rose-200/40' : 'bg-slate-50/70 border-slate-200/50'}`}>
+            <div className={`rounded-xl border p-3 ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : isHinglish ? 'bg-indigo-50/60 border-indigo-200/40' : 'bg-slate-50/70 border-slate-200/50'}`}>
               <button
                 type="button"
                 onClick={() => setShowPowerFields(v => !v)}
                 className={`w-full flex items-center justify-between gap-2 text-left text-[12px] font-semibold ${tp}`}
               >
                 <span className="flex items-center gap-2">
-                  <Star size={14} className={isHinglish ? 'text-rose-400' : 'text-indigo-400'} />
+                  <Star size={14} className={isHinglish ? 'text-indigo-400' : 'text-indigo-400'} />
                   {isHinglish ? 'Power Options' : (lang === 'hi' ? 'Power Options' : 'Power Options')}
                 </span>
                 <span className={`text-[11px] font-medium ${ts}`}>
@@ -844,7 +898,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
                         className={`w-full px-3 py-2 rounded-lg text-[12px] border focus:outline-none focus:ring-2 ${inputCls}`}
                       >
                         {badgeOptions.map((b) => {
-                          const meta = titleBadgeMeta(b);
+                          const meta = titleBadgeMetaForTheme(b, theme);
                           return (
                             <option key={b} value={b}>
                               {meta.emoji} {meta.label}
@@ -854,7 +908,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
                       </select>
                       <div className="mt-1">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] ${titleBadgePillClass(newBadge, theme)}`}>
-                          {titleBadgeMeta(newBadge).emoji} {titleBadgeMeta(newBadge).label}
+                          {titleBadgeMetaForTheme(newBadge, theme).emoji} {titleBadgeMetaForTheme(newBadge, theme).label}
                         </span>
                       </div>
                     </div>
@@ -964,7 +1018,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
             </>
           ) : (
             <>
-              <p className={`text-lg font-bold ${isHinglish ? 'text-rose-400' : isDark ? 'text-violet-400' : 'text-violet-500'}`}>
+              <p className={`text-lg font-bold ${isHinglish ? 'text-indigo-400' : isDark ? 'text-violet-400' : 'text-violet-500'}`}>
                 {completedQuests.reduce((a, q) => a + q.xpReward, 0)}
               </p>
               <p className={`text-[11px] ${ts}`}>{t('punyaEarned', lang)}</p>
@@ -984,7 +1038,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
               <div className="min-w-0">
                 <p className={`text-[12px] font-bold ${tp}`}>
                   {(isHinglish ? 'Due on' : lang === 'hi' ? 'इस दिन देय' : 'Due on')}
-                  <span className={`ml-2 font-black ${isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{selectedISO}</span>
+                  <span className={`ml-2 font-black ${isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{selectedISO}</span>
                 </p>
                 <p className={`text-[11px] mt-0.5 ${ts}`}>{selectedDayQuests.length} quest{selectedDayQuests.length !== 1 ? 's' : ''}</p>
               </div>
@@ -992,7 +1046,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
                 onClick={() => setSelectedISO(todayISO())}
                 className={`px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
                   isHinglish
-                    ? 'bg-rose-50/70 border border-rose-200/40 text-rose-600 hover:bg-rose-100/70'
+                    ? 'bg-indigo-50/70 border border-indigo-200/40 text-indigo-600 hover:bg-indigo-100/70'
                     : isDark
                       ? 'bg-white/[0.03] border border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'
                       : 'bg-slate-50 border border-slate-200/50 text-slate-700 hover:bg-slate-100'
@@ -1049,7 +1103,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
                             onClick={() => handleComplete(q.id)}
                             className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-[1.03] ${
                               isHinglish
-                                ? 'bg-gradient-to-r from-rose-500 to-violet-500 text-white'
+                                ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
                                 : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
                             }`}
                             aria-label="Complete quest"
@@ -1079,7 +1133,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
 	            const focusOther = !!focusSession && focusSession.questId !== quest.id;
 	            const focusRemaining = focusOnThis ? Math.max(0, focusSession!.endsAt - focusNowMs) : 0;
 	            const badgeId = (quest.badge || 'none') as string;
-	            const badge = titleBadgeMeta(badgeId);
+	            const badge = titleBadgeMetaForTheme(badgeId, theme);
 
             return (
               <div
@@ -1151,7 +1205,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
                       {showDueToday && !showOverdue && (
                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${
                           isHinglish
-                            ? 'bg-rose-100 text-rose-600'
+                            ? 'bg-indigo-100 text-indigo-600'
                             : isDark
                               ? 'bg-amber-500/15 text-amber-400'
                               : 'bg-amber-50 text-amber-600'
@@ -1170,7 +1224,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
 	                      {/* Recurring pill */}
 	                      {quest.recurring && quest.recurring !== 'none' && (
 	                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-	                          isHinglish ? 'bg-rose-50 text-rose-700' : isDark ? 'bg-white/[0.04] text-slate-300' : 'bg-slate-50 text-slate-700'
+	                          isHinglish ? 'bg-indigo-50 text-indigo-700' : isDark ? 'bg-white/[0.04] text-slate-300' : 'bg-slate-50 text-slate-700'
 	                        }`}>
 	                          {quest.recurring === 'daily' ? t('recurrenceDaily', lang) : t('recurrenceWeekly', lang)}
 	                        </span>
@@ -1203,7 +1257,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
 	                      {/* Focus status */}
 	                      {focusOnThis && quest.status === 'active' && (
 	                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-	                          isHinglish ? 'bg-rose-100 text-rose-700' : isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'
+	                          isHinglish ? 'bg-indigo-100 text-indigo-700' : isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'
 	                        }`}>
 	                          {t('focusInProgress', lang)} • {formatMs(focusRemaining)}
 	                        </span>
@@ -1216,7 +1270,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
                     isDark ? 'bg-white/[0.03]' : 'bg-slate-50'
                   }`}>
                     <Star size={13} className={
-                      isHinglish ? 'text-rose-400 fill-rose-300' :
+                      isHinglish ? 'text-indigo-400 fill-indigo-300' :
                       isDark ? 'text-indigo-400 fill-indigo-400' :
                       'text-indigo-500 fill-indigo-400'
                     } />
@@ -1233,7 +1287,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
 	                          onClick={() => onStopFocus()}
 	                          className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
 	                            isHinglish
-	                              ? 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/15'
+	                              ? 'bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/15'
 	                              : isDark
 	                                ? 'bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/20'
 	                                : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
@@ -1243,11 +1297,11 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
 	                        </button>
 	                      ) : (
 	                        <button
-	                          onClick={() => onStartFocus(quest.id)}
+	                          onClick={() => onStartFocus(quest.id, { durationMs: focusPreset.durationMs, label: focusPreset.label })}
 	                          className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
 	                            focusOther
 	                              ? (isDark ? 'bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]' : 'bg-slate-50 text-slate-700 hover:bg-slate-100')
-	                              : (isHinglish ? 'bg-gradient-to-r from-rose-500 to-violet-500 text-white' : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white')
+	                              : (isHinglish ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white' : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white')
 	                          }`}
 	                        >
 	                          {focusOther ? 'Switch Focus' : t('focusStart', lang)}
@@ -1257,7 +1311,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
 	                    <button
 	                      onClick={() => openEdit(quest)}
 	                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-	                        isHinglish ? 'bg-white/60 hover:bg-white/80 border border-rose-200/30'
+	                        isHinglish ? 'bg-white/60 hover:bg-white/80 border border-indigo-200/30'
 	                        : isDark ? 'bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06]'
 	                        : 'bg-white hover:bg-slate-50 border border-slate-200/50'
 	                      }`}
@@ -1269,7 +1323,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
 	                    <button
 	                      onClick={() => toggleExpand(quest.id)}
 	                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-	                        isHinglish ? 'bg-white/60 hover:bg-white/80 border border-rose-200/30'
+	                        isHinglish ? 'bg-white/60 hover:bg-white/80 border border-indigo-200/30'
 	                        : isDark ? 'bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06]'
 	                        : 'bg-white hover:bg-slate-50 border border-slate-200/50'
 	                      }`}
@@ -1306,7 +1360,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, ownedBadges, s
 	                          className={`mt-1 w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
 	                        >
 	                          {badgeOptions.map((b) => {
-	                            const meta = titleBadgeMeta(b);
+	                            const meta = titleBadgeMetaForTheme(b, theme);
 	                            const label = b === 'none' ? 'None' : `${meta.emoji} ${meta.label}`;
 	                            return <option key={b} value={b}>{label}</option>;
 	                          })}

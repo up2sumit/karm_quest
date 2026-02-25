@@ -103,7 +103,7 @@ export function QuestCalendar({
   };
 
   const dayCellBase = isHinglish
-    ? 'bg-white/60 border-rose-200/30 hover:bg-white/80'
+    ? 'bg-white/60 border-indigo-200/30 hover:bg-white/80'
     : isDark
       ? 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06]'
       : 'bg-white border-slate-200/50 hover:bg-slate-50';
@@ -120,14 +120,14 @@ export function QuestCalendar({
             className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all ${dayCellBase}`}
             aria-label="Previous month"
           >
-            <ChevronLeft size={18} className={isHinglish ? 'text-rose-500' : isDark ? 'text-slate-300' : 'text-slate-600'} />
+            <ChevronLeft size={18} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-slate-300' : 'text-slate-600'} />
           </button>
           <button
             onClick={() => setMonthCursor((d) => addMonths(d, 1))}
             className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all ${dayCellBase}`}
             aria-label="Next month"
           >
-            <ChevronRight size={18} className={isHinglish ? 'text-rose-500' : isDark ? 'text-slate-300' : 'text-slate-600'} />
+            <ChevronRight size={18} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-slate-300' : 'text-slate-600'} />
           </button>
           <div className="ml-1">
             <p className={`text-[13px] font-black ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{headerText}</p>
@@ -181,7 +181,7 @@ export function QuestCalendar({
               className={`aspect-square rounded-2xl border p-2 flex flex-col items-start justify-between transition-all ${dayCellBase} ${
                 isSelected
                   ? isHinglish
-                    ? 'ring-2 ring-rose-400/60'
+                    ? 'ring-2 ring-indigo-400/60'
                     : isDark
                       ? 'ring-2 ring-indigo-500/40'
                       : 'ring-2 ring-indigo-400/40'
@@ -189,7 +189,7 @@ export function QuestCalendar({
               } ${
                 isToday
                   ? isHinglish
-                    ? 'outline outline-1 outline-rose-300/60'
+                    ? 'outline outline-1 outline-indigo-300/60'
                     : isDark
                       ? 'outline outline-1 outline-white/[0.14]'
                       : 'outline outline-1 outline-slate-200'
@@ -197,12 +197,12 @@ export function QuestCalendar({
               }`}
             >
               <div className="w-full flex items-start justify-between gap-2">
-                <span className={`text-[12px] font-bold ${isToday ? (isHinglish ? 'text-rose-600' : isDark ? 'text-slate-100' : 'text-slate-900') : (isDark ? 'text-slate-200' : 'text-slate-800')}`}>{cell.day}</span>
+                <span className={`text-[12px] font-bold ${isToday ? (isHinglish ? 'text-indigo-600' : isDark ? 'text-slate-100' : 'text-slate-900') : (isDark ? 'text-slate-200' : 'text-slate-800')}`}>{cell.day}</span>
                 {dayQuests.length > 0 && (
                   <span
                     className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
                       isHinglish
-                        ? 'bg-rose-500 text-white'
+                        ? 'bg-indigo-500 text-white'
                         : isDark
                           ? 'bg-indigo-500/30 text-indigo-200'
                           : 'bg-indigo-50 text-indigo-700'
@@ -217,7 +217,7 @@ export function QuestCalendar({
               {/* Dots */}
               <div className="w-full flex items-center gap-1">
                 {activeCount > 0 && (
-                  <span className={`h-1.5 w-1.5 rounded-full ${isHinglish ? 'bg-rose-500' : isDark ? 'bg-indigo-400' : 'bg-indigo-500'}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${isHinglish ? 'bg-indigo-500' : isDark ? 'bg-indigo-400' : 'bg-indigo-500'}`} />
                 )}
                 {doneCount > 0 && (
                   <span className={`h-1.5 w-1.5 rounded-full ${isDark ? 'bg-emerald-400/70' : 'bg-emerald-500/70'}`} />

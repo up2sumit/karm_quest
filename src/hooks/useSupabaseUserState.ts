@@ -44,6 +44,7 @@ export function useSupabaseUserState<T extends object>(opts: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   const restoreGuard = useRef(false);
   const didFetchKey = useRef<string | null>(null);
@@ -59,6 +60,7 @@ export function useSupabaseUserState<T extends object>(opts: {
       setSaving(false);
       setError(null);
       setQueued(false);
+      setLastSyncedAt(null);
       didFetchKey.current = null;
       return;
     }
@@ -73,7 +75,7 @@ export function useSupabaseUserState<T extends object>(opts: {
 
       const { data, error: e } = await supabase
         .from('user_state')
-        .select('version,snapshot')
+        .select('version,snapshot,updated_at')
         .eq('user_id', userId)
         .eq('app_key', appKey)
         .maybeSingle();
@@ -97,6 +99,7 @@ export function useSupabaseUserState<T extends object>(opts: {
           }, 0);
         }
         lastSavedHash.current = JSON.stringify({ v: data.version, s: data.snapshot });
+        setLastSyncedAt((data as any)?.updated_at ?? null);
         setRemoteHydrated(true);
         return;
       }
@@ -115,8 +118,13 @@ export function useSupabaseUserState<T extends object>(opts: {
           return;
         }
 
-        const { error: insErr } = await supabase.from('user_state').upsert(seed, { onConflict: 'user_id,app_key' });
+        const { data: insData, error: insErr } = await supabase
+          .from('user_state')
+          .upsert(seed, { onConflict: 'user_id,app_key' })
+          .select('updated_at')
+          .maybeSingle();
         if (insErr) throw insErr;
+        setLastSyncedAt((insData as any)?.updated_at ?? new Date().toISOString());
         lastSavedHash.current = JSON.stringify({ v: seedVersion, s: seedSnapshot });
         setRemoteHydrated(true);
       } catch (err) {
@@ -162,8 +170,13 @@ export function useSupabaseUserState<T extends object>(opts: {
           return;
         }
 
-        const { error: e } = await supabase.from('user_state').upsert(payload, { onConflict: 'user_id,app_key' });
+        const { data: upData, error: e } = await supabase
+          .from('user_state')
+          .upsert(payload, { onConflict: 'user_id,app_key' })
+          .select('updated_at')
+          .maybeSingle();
         if (e) throw e;
+        setLastSyncedAt((upData as any)?.updated_at ?? new Date().toISOString());
 
         lastSavedHash.current = hash;
       } catch (err) {
@@ -183,5 +196,5 @@ export function useSupabaseUserState<T extends object>(opts: {
     };
   }, [enabled, userId, remoteHydrated, snapshot, version, debounceMs, appKey]);
 
-  return { remoteHydrated, saving, error, queued };
+  return { remoteHydrated, saving, error, queued, lastSyncedAt };
 }

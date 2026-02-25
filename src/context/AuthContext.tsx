@@ -8,6 +8,8 @@ type AuthContextValue = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signUp: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  signInWithGoogle: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  resetPassword: (email: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => Promise<void>;
 };
 
@@ -17,6 +19,8 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   signIn: async () => ({ ok: false, error: "Auth not ready" }),
   signUp: async () => ({ ok: false, error: "Auth not ready" }),
+  signInWithGoogle: async () => ({ ok: false, error: "Auth not ready" }),
+  resetPassword: async () => ({ ok: false, error: "Auth not ready" }),
   signOut: async () => {},
 });
 
@@ -64,6 +68,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signUp: async (email, password) => {
         const { error } = await supabase.auth.signUp({ email, password });
+        if (error) return { ok: false, error: error.message };
+        return { ok: true };
+      },
+      signInWithGoogle: async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: window.location.origin },
+        });
+        if (error) return { ok: false, error: error.message };
+        return { ok: true };
+      },
+      resetPassword: async (email) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          // If you later add a dedicated reset route, point it there.
+          redirectTo: window.location.origin,
+        });
         if (error) return { ok: false, error: error.message };
         return { ok: true };
       },

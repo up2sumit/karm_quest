@@ -26,7 +26,8 @@ function hashHue(input: string): number {
 function colorForCategory(cat: string, mode: 'light' | 'dark' | 'hinglish'): string {
   const hue = hashHue(cat);
   const sat = 72;
-  const light = mode === 'dark' ? 62 : mode === 'hinglish' ? 56 : 50;
+  // Hinglish uses Charcoal Dark colors.
+  const light = (mode === 'dark' || mode === 'hinglish') ? 62 : 50;
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
@@ -54,23 +55,23 @@ export function CategoryAnalytics({
 
   const mode: 'light' | 'dark' | 'hinglish' = isHinglish ? 'hinglish' : isDark ? 'dark' : 'light';
 
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+  const darkLike = isDark || isHinglish;
 
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const card = darkLike
+    ? 'bg-[var(--kq-surface)]/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
+    : 'bg-[var(--kq-surface)]/80 backdrop-blur-xl border border-[var(--kq-border)]/40 shadow-sm';
+
+  const tp = darkLike ? 'text-slate-200' : 'text-[var(--kq-text-primary)]';
+  const ts = darkLike ? 'text-[var(--kq-text-muted)]' : 'text-[var(--kq-text-muted)]';
 
   const chartTheme = useMemo(() => {
-    const axis = isDark ? 'rgba(226,232,240,0.65)' : '#64748B';
-    const grid = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)';
-    const tooltipBg = isDark ? 'rgba(2,6,23,0.92)' : 'rgba(255,255,255,0.98)';
-    const tooltipBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)';
-    const tooltipText = isDark ? 'rgba(226,232,240,0.9)' : 'rgba(15,23,42,0.9)';
+    const axis = darkLike ? 'rgba(226,232,240,0.65)' : '#64748B';
+    const grid = darkLike ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)';
+    const tooltipBg = darkLike ? 'rgba(2,6,23,0.92)' : 'rgba(255,255,255,0.98)';
+    const tooltipBorder = darkLike ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)';
+    const tooltipText = darkLike ? 'rgba(226,232,240,0.9)' : 'rgba(15,23,42,0.9)';
     return { axis, grid, tooltipBg, tooltipBorder, tooltipText };
-  }, [isDark]);
+  }, [darkLike]);
 
   const { barData, pieData, categories, totalXp7d } = useMemo(() => {
     const days: string[] = [];
@@ -219,7 +220,7 @@ export function CategoryAnalytics({
         </div>
         <div
           className={`text-[11px] font-semibold px-2.5 py-1 rounded-xl ${
-            isDark ? 'bg-white/[0.04] text-slate-300' : 'bg-slate-100/70 text-slate-600'
+            isDark ? 'bg-[var(--kq-surface)]/[0.04] text-slate-300' : 'bg-[var(--kq-surface2)]/70 text-[var(--kq-text-secondary)]'
           }`}
         >
           {t('last7Days', lang)}
@@ -227,12 +228,12 @@ export function CategoryAnalytics({
       </div>
 
       {totalXp7d <= 0 ? (
-        <div className={`mt-4 rounded-2xl p-4 text-[12px] ${isDark ? 'bg-white/[0.02] text-slate-400' : 'bg-slate-50 text-slate-600'}`}>
+        <div className={`mt-4 rounded-2xl p-4 text-[12px] ${isDark ? 'bg-[var(--kq-surface)]/[0.02] text-[var(--kq-text-muted)]' : 'bg-[var(--kq-bg2)] text-[var(--kq-text-secondary)]'}`}>
           {t('categoryAnalyticsEmpty', lang)}
         </div>
       ) : (
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className={`lg:col-span-2 rounded-2xl ${isDark ? 'bg-white/[0.02]' : 'bg-slate-50/60'} p-3`}>
+          <div className={`lg:col-span-2 rounded-2xl ${isDark ? 'bg-[var(--kq-surface)]/[0.02]' : 'bg-[var(--kq-bg2)]/60'} p-3`}>
             <div className={`text-[11px] font-semibold mb-2 ${ts}`}>XP / day</div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -250,7 +251,7 @@ export function CategoryAnalytics({
             </div>
           </div>
 
-          <div className={`rounded-2xl ${isDark ? 'bg-white/[0.02]' : 'bg-slate-50/60'} p-3`}>
+          <div className={`rounded-2xl ${isDark ? 'bg-[var(--kq-surface)]/[0.02]' : 'bg-[var(--kq-bg2)]/60'} p-3`}>
             <div className={`text-[11px] font-semibold mb-2 ${ts}`}>Share</div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">

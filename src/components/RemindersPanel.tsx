@@ -30,7 +30,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
   quests: Quest[];
   notes: Note[];
 }) {
-  const { isDark, isHinglish } = useTheme();
+  const { isDark, isHinglish, isModern, lang } = useTheme();
 
   const {
     upcoming,
@@ -49,21 +49,27 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
   const [title, setTitle] = useState<string>('');
   const [msg, setMsg] = useState<string | null>(null);
 
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm';
-  const tp = isHinglish ? 'text-slate-900' : isDark ? 'text-slate-100' : 'text-slate-900';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const btnPrimary = isHinglish
-    ? 'bg-gradient-to-r from-rose-500 to-violet-500'
-    : 'bg-gradient-to-r from-indigo-500 to-violet-500';
-  const btnSoft = isHinglish
-    ? 'bg-white/70 border border-rose-200/30 hover:bg-white'
-    : isDark
-      ? 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]'
-      : 'bg-white/70 border border-slate-200/60 hover:bg-white';
+  const card = isModern
+    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-sm'
+    : isHinglish
+      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
+      : isDark
+        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] shadow-sm'
+        : 'bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm';
+  const tp = isModern ? 'text-[var(--kq-text-primary)]' : isHinglish ? 'text-slate-900' : isDark ? 'text-slate-100' : 'text-slate-900';
+  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const btnPrimary = isModern
+    ? 'bg-[var(--kq-primary)] hover:bg-[var(--kq-primary-light)]'
+    : isHinglish
+      ? 'bg-gradient-to-r from-indigo-500 to-violet-500'
+      : 'bg-gradient-to-r from-indigo-500 to-violet-500';
+  const btnSoft = isModern
+    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] hover:bg-[var(--kq-primary-soft)]'
+    : isHinglish
+      ? 'bg-white/70 border border-indigo-200/30 hover:bg-white'
+      : isDark
+        ? 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]'
+        : 'bg-white/70 border border-slate-200/60 hover:bg-white';
 
   const entityOptions = useMemo(() => {
     if (entityType === 'task') {
@@ -94,7 +100,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
 
     const selected = entityOptions.find((e) => e.id === entityId);
     if (!entityId || !selected) {
-      setMsg(isHinglish ? 'Pehle quest/note select karo.' : 'Select a quest or note first.');
+      setMsg(lang === 'pro' ? 'Select a task or note first.' : (isHinglish ? 'Pehle quest/note select karo.' : 'Select a quest or note first.'));
       return;
     }
 
@@ -117,7 +123,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
     });
 
     if (res.ok) {
-      setMsg(isHinglish ? 'Reminder set ✅ (cron runs every minute)' : 'Reminder set ✅ (cron runs every minute)');
+      setMsg(lang === 'pro' ? 'Reminder set ✅' : (isHinglish ? 'Reminder set ✅ (cron runs every minute)' : 'Reminder set ✅ (cron runs every minute)'));
       setTitle('');
     } else {
       setMsg(res.error || (isHinglish ? 'Error' : 'Error'));
@@ -175,7 +181,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
                     : isDark ? 'bg-white/[0.02] border border-white/[0.06] text-slate-400' : 'bg-white border border-slate-200/60 text-slate-600'
                 }`}
               >
-                {isHinglish ? 'Quest' : 'Quest'}
+                {lang === 'pro' ? 'Task' : (isHinglish ? 'Quest' : 'Quest')}
               </button>
               <button
                 onClick={() => { setEntityType('note'); setEntityId(''); }}
@@ -194,7 +200,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
               onChange={(e) => setEntityId(e.target.value)}
               className={`mt-3 w-full px-3 py-2 rounded-xl text-[13px] outline-none ${
                 isHinglish
-                  ? 'bg-white/70 border border-rose-200/30 text-slate-900'
+                  ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
                   : isDark
                     ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
                     : 'bg-white/70 border border-slate-200/60 text-slate-900'
@@ -215,7 +221,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
               placeholder={isHinglish ? 'eg: Important: Submit assignment' : 'e.g., Important: Submit assignment'}
               className={`mt-1 w-full px-3 py-2 rounded-xl text-[13px] outline-none ${
                 isHinglish
-                  ? 'bg-white/70 border border-rose-200/30 text-slate-900'
+                  ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
                   : isDark
                     ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
                     : 'bg-white/70 border border-slate-200/60 text-slate-900'
@@ -235,14 +241,14 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
             </div>
 
             <div className="mt-3 flex items-center gap-2">
-              <CalendarClock size={16} className={isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-600'} />
+              <CalendarClock size={16} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-600'} />
               <input
                 type="datetime-local"
                 value={whenLocal}
                 onChange={(e) => setWhenLocal(e.target.value)}
                 className={`flex-1 px-3 py-2 rounded-xl text-[13px] outline-none ${
                   isHinglish
-                    ? 'bg-white/70 border border-rose-200/30 text-slate-900'
+                    ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
                     : isDark
                       ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
                       : 'bg-white/70 border border-slate-200/60 text-slate-900'
@@ -258,7 +264,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
             </button>
 
             {(msg || error) ? (
-              <div className={`mt-3 text-[12px] ${String(msg || error).toLowerCase().includes('error') ? 'text-[tomato]' : (isHinglish ? 'text-rose-700' : isDark ? 'text-amber-200' : 'text-slate-800')}`}>
+              <div className={`mt-3 text-[12px] ${String(msg || error).toLowerCase().includes('error') ? 'text-[tomato]' : (isHinglish ? 'text-indigo-700' : isDark ? 'text-amber-200' : 'text-slate-800')}`}>
                 {msg || error}
               </div>
             ) : null}
@@ -318,7 +324,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
                 </div>
                 <div className="shrink-0 flex items-center gap-2">
                   {r.status === 'sent' ? (
-                    <CheckCircle2 size={18} className={isHinglish ? 'text-rose-500' : isDark ? 'text-emerald-400' : 'text-emerald-600'} />
+                    <CheckCircle2 size={18} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-emerald-400' : 'text-emerald-600'} />
                   ) : null}
                   <button
                     onClick={() => void deleteReminder(r.id)}

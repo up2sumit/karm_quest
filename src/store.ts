@@ -1,7 +1,15 @@
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'legendary';
 export type QuestStatus = 'active' | 'completed';
 export type Recurrence = 'none' | 'daily' | 'weekly';
-export type Page = 'dashboard' | 'quests' | 'notes' | 'achievements' | 'challenges' | 'shop' | 'profile';
+export type Page =
+  | 'dashboard'
+  | 'quests'
+  | 'notes'
+  | 'achievements'
+  | 'challenges'
+  | 'shop'
+  | 'leaderboard'
+  | 'profile';
 
 export interface FocusSession {
   questId: string;
@@ -9,8 +17,17 @@ export interface FocusSession {
   endsAt: number;
   durationMs: number;
   bonusXp: number;
+  /** Optional label for the chosen focus mode (e.g. Pomodoro, Deep Work). */
+  label?: string;
   /** Guard against awarding twice on refresh. */
   awarded: boolean;
+}
+
+export interface BreakSession {
+  startedAt: number;
+  endsAt: number;
+  durationMs: number;
+  kind: 'short' | 'long';
 }
 
 export interface SubTask {
@@ -120,6 +137,8 @@ export interface UserStats {
   questsCompleted: number;
   totalQuests: number;
   avatarEmoji: string;
+  /** Optional uploaded avatar image stored in Supabase Storage (private). */
+  avatarImagePath?: string | null;
   username: string;
 }
 
@@ -133,9 +152,9 @@ export type FocusLogEvent = {
 
 export const difficultyConfig: Record<Difficulty, { label: string; color: string; bg: string; darkBg: string; xp: number }> = {
   easy: { label: 'Sahaj', color: 'text-emerald-600', bg: 'bg-emerald-50', darkBg: 'bg-emerald-500/10', xp: 10 },
-  medium: { label: 'Madhyam', color: 'text-amber-600', bg: 'bg-amber-50', darkBg: 'bg-amber-500/10', xp: 25 },
+  medium: { label: 'Madhyam', color: 'text-[var(--kq-accent)]', bg: 'bg-amber-50', darkBg: 'bg-[var(--kq-accent)]/10', xp: 25 },
   hard: { label: 'Kathin', color: 'text-red-500', bg: 'bg-red-50', darkBg: 'bg-red-500/10', xp: 50 },
-  legendary: { label: 'Divya', color: 'text-violet-500', bg: 'bg-violet-50', darkBg: 'bg-violet-500/10', xp: 100 },
+  legendary: { label: 'Divya', color: 'text-[var(--kq-primary)]', bg: 'bg-violet-50', darkBg: 'bg-[var(--kq-primary)]/10', xp: 100 },
 };
 
 export const defaultQuests: Quest[] = [
@@ -246,6 +265,8 @@ export type ParsedDueDate = {
 export type WeeklyReport = {
   /** Unique id for UI lists (not used for logic). */
   id: string;
+  /** Optional display title for the report card (older saves may not have it). */
+  title?: string;
   /** Monday of the week (local time) as YYYY-MM-DD. */
   weekStart: string;
   /** Sunday of the week (local time) as YYYY-MM-DD. */
@@ -258,6 +279,8 @@ export type WeeklyReport = {
   coinsEarned: number;
   /** Streak snapshot at generation time */
   streakDays: number;
+  /** Optional label used by some UI variants (older saves may not have it). */
+  levelLabel?: string;
   /** For branding */
   username: string;
   avatarEmoji: string;

@@ -11,6 +11,7 @@ export function BackupsPanel(props: {
   onApplySnapshot?: (snapshot: unknown) => void;
 }) {
   const { isDark, isHinglish } = useTheme();
+  const darkLike = isDark || isHinglish;
   const { enabled, userId, appKey, onApplySnapshot } = props;
 
   const backups = useSupabaseBackups({ enabled, userId, appKey, limit: 20 });
@@ -21,20 +22,16 @@ export function BackupsPanel(props: {
   const [toast, setToast] = useState<string | null>(null);
 
   const card = useMemo(() => {
-    return isHinglish
-      ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-      : isDark
+    return darkLike
         ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] shadow-sm'
         : 'bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm';
-  }, [isDark, isHinglish]);
+  }, [darkLike]);
 
-  const tp = isHinglish ? 'text-slate-900' : isDark ? 'text-slate-100' : 'text-slate-900';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const btnSoft = isHinglish
-    ? 'bg-white/70 border border-rose-200/30 hover:bg-white'
-    : isDark
-      ? 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]'
-      : 'bg-white/70 border border-slate-200/60 hover:bg-white';
+  const tp = darkLike ? 'text-slate-100' : 'text-slate-900';
+  const ts = darkLike ? 'text-slate-400' : 'text-slate-500';
+  const btnSoft = darkLike
+    ? 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]'
+    : 'bg-white/70 border border-slate-200/60 hover:bg-white';
 
   async function onCreate() {
     const res = await backups.createBackup(label.trim());
@@ -103,7 +100,7 @@ export function BackupsPanel(props: {
       ) : null}
 
       {backups.error ? <div className="mt-3 text-xs text-[tomato]">{backups.error}</div> : null}
-      {toast ? <div className={`mt-3 text-xs ${isHinglish ? 'text-rose-700' : isDark ? 'text-amber-200' : 'text-slate-800'}`}>{toast}</div> : null}
+      {toast ? <div className={`mt-3 text-xs ${darkLike ? 'text-amber-200' : 'text-slate-800'}`}>{toast}</div> : null}
 
       {/* Create */}
       <div className="mt-4 flex items-center gap-2 flex-wrap">
@@ -113,7 +110,7 @@ export function BackupsPanel(props: {
           placeholder={isHinglish ? 'Label (optional): before major changes' : 'Label (optional): before major changes'}
           className={`px-3 py-2 rounded-xl text-[13px] outline-none flex-1 min-w-[220px] ${
             isHinglish
-              ? 'bg-white/70 border border-rose-200/30 text-slate-900'
+              ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
               : isDark
                 ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
                 : 'bg-white/70 border border-slate-200/60 text-slate-900'
@@ -124,7 +121,7 @@ export function BackupsPanel(props: {
           onClick={() => void onCreate()}
           disabled={!enabled || backups.creating}
           className={`px-4 py-2 rounded-xl text-white text-[13px] font-semibold shadow-md hover:shadow-lg hover:scale-[1.01] transition-all ${
-            isHinglish ? 'bg-gradient-to-r from-rose-500 to-violet-500' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
+            darkLike ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
           } ${!enabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <span className="inline-flex items-center gap-2">
@@ -203,7 +200,7 @@ export function BackupsPanel(props: {
                   setConfirmRestore(null);
                   void doRestore(id);
                 }}
-                className={`px-4 py-2 rounded-xl text-[13px] font-semibold text-white ${isHinglish ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'} transition-all`}
+                className={`px-4 py-2 rounded-xl text-[13px] font-semibold text-white ${isHinglish ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'} transition-all`}
               >
                 {isHinglish ? 'Restore' : 'Restore'}
               </button>
