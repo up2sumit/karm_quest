@@ -54,6 +54,7 @@ function ShopItemCard({
   coins,
   onBuy,
   onEquip,
+  onUnequip,
   showToggle,
   kindLabel,
 }: {
@@ -63,6 +64,7 @@ function ShopItemCard({
   coins: number;
   onBuy: () => void;
   onEquip?: () => void;
+  onUnequip?: () => void;
   showToggle?: boolean;
   kindLabel: string;
 }) {
@@ -111,10 +113,13 @@ function ShopItemCard({
               {showToggle && (
                 <Toggle
                   checked={equipped}
-                  disabled={!owned}
+                  // If item is equipped but there's no "off" behavior (e.g. the default skin),
+                  // disable the switch to avoid a confusing no-op click.
+                  disabled={!owned || (equipped && !onUnequip)}
                   onToggle={() => {
                     if (!owned) return;
-                    if (!equipped) onEquip?.();
+                    if (equipped) onUnequip?.();
+                    else onEquip?.();
                   }}
                 />
               )}
@@ -185,7 +190,25 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
   void now;
 
   const frames = useMemo(() => shopCatalog.filter((i) => i.kind === 'frame').map((i) => displayItem(i, isModern)), [isModern]);
-  const skins = useMemo(() => shopCatalog.filter((i) => i.kind === 'skin').map((i) => displayItem(i, isModern)), [isModern]);
+  const skins = useMemo(() => {
+    // Always offer a way to revert to the original sidebar look.
+    // `default` is owned by default (see defaultShopState) so this acts as a reset.
+    const original: ShopItem = {
+      id: 'skin_default',
+      kind: 'skin',
+      name: isModern ? 'Original sidebar' : 'Default (Original)',
+      description: isModern ? 'Revert to the base sidebar theme.' : 'Go back to the original sidebar theme.',
+      emoji: isModern ? '↩️' : '↩️',
+      cost: 0,
+      skinId: 'default',
+    };
+
+    const list = shopCatalog
+      .filter((i) => i.kind === 'skin')
+      .map((i) => displayItem(i, isModern));
+
+    return [original, ...list];
+  }, [isModern]);
   const boosts = useMemo(() => shopCatalog.filter((i) => i.kind === 'boost').map((i) => displayItem(i, isModern)), [isModern]);
   const badges = useMemo(() => shopCatalog.filter((i) => i.kind === 'badge').map((i) => displayItem(i, isModern)), [isModern]);
 
@@ -284,6 +307,8 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
                   coins={stats.coins}
                   onBuy={() => onBuy(item.id)}
                   onEquip={() => item.skinId && onEquipSkin(item.skinId)}
+                  // If a purchased theme is equipped, allow toggling OFF to revert to the original.
+                  onUnequip={item.skinId && item.skinId !== 'default' ? () => onEquipSkin('default') : undefined}
                   showToggle
                   kindLabel={isModern ? 'Style' : 'Theme'}
                 />

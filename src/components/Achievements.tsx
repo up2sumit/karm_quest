@@ -58,29 +58,33 @@ const rarityConfig = {
 export function Achievements({ achievements, stats, quests, notes, onShareAchievement }: AchievementsProps) {
   const { isDark, isHinglish, isModern, lang } = useTheme();
 
+  const darkLike = isDark || isHinglish;
+
   const card = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_0_rgba(0,0,0,0.02),0_10px_30px_rgba(0,0,0,0.06)]'
-    : isHinglish
-      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
-      : isDark
-        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-        : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+    : darkLike
+      ? 'bg-white/[0.04] backdrop-blur-xl border border-white/[0.06] shadow-sm'
+      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
 
   const tp = isModern
     ? 'text-[var(--kq-text-primary)]'
-    : isHinglish
-      ? 'text-slate-800'
-      : isDark
-        ? 'text-slate-200'
-        : 'text-slate-800';
+    : darkLike
+      ? 'text-slate-200'
+      : 'text-slate-800';
 
   const ts = isModern
     ? 'text-[var(--kq-text-secondary)]'
-    : isHinglish
-      ? 'text-slate-500'
-      : isDark
-        ? 'text-slate-400'
-        : 'text-slate-500';
+    : darkLike
+      ? 'text-slate-400'
+      : 'text-slate-500';
+
+  const tm = isModern
+    ? 'text-[var(--kq-text-muted)]'
+    : darkLike
+      ? 'text-slate-600'
+      : 'text-slate-400';
+
+  const statCard = 'kq-card kq-card-hover backdrop-blur-xl';
 
   const unlocked = achievements.filter((a) => a.unlocked);
   const locked = achievements.filter((a) => !a.unlocked);
@@ -223,22 +227,37 @@ export function Achievements({ achievements, stats, quests, notes, onShareAchiev
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className={`${card} rounded-2xl p-4 text-center`}>
-          <span className="text-2xl">🏅</span>
-          <p className={`text-lg font-bold mt-1.5 ${tp}`}>{unlocked.length}/{achievements.length}</p>
-          <p className={`text-[11px] ${ts}`}>{t('siddhiUnlocked', lang)}</p>
+        <div className={`${statCard} rounded-2xl p-4 sm:p-5 transition-all duration-300 group cursor-default hover:-translate-y-0.5`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className={`text-[11px] font-medium ${ts}`}>{t('siddhiLabel', lang)}</p>
+              <p className={`text-[22px] font-black mt-0.5 ${tp}`}>{unlocked.length}/{achievements.length}</p>
+              <p className={`text-[11px] mt-0.5 ${tm}`}>{t('siddhiUnlocked', lang)}</p>
+            </div>
+            <span className="text-xl opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all">🏆</span>
+          </div>
         </div>
 
-        <div className={`${card} rounded-2xl p-4 text-center`}>
-          <span className="text-2xl">{isModern ? '📈' : '🕉️'}</span>
-          <p className={`text-lg font-bold mt-1.5 ${tp}`}>{totalXp} {xpLabel}</p>
-          <p className={`text-[11px] ${ts}`}>{t('totalExperience', lang)}</p>
+        <div className={`${statCard} rounded-2xl p-4 sm:p-5 transition-all duration-300 group cursor-default hover:-translate-y-0.5`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className={`text-[11px] font-medium ${ts}`}>{t('totalExperience', lang)}</p>
+              <p className={`text-[22px] font-black mt-0.5 ${tp}`}>{totalXp} {xpLabel}</p>
+              <p className={`text-[11px] mt-0.5 ${tm}`}>{t('chakraLabel', lang)} {stats.level}</p>
+            </div>
+            <span className="text-xl opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all">🕉️</span>
+          </div>
         </div>
 
-        <div className={`${card} rounded-2xl p-4 text-center`}>
-          <span className="text-2xl">🎯</span>
-          <p className={`text-lg font-bold mt-1.5 ${tp}`}>{nextAchievement ? Math.max(0, nextAchievement.xpRequired - totalXp) : 0}</p>
-          <p className={`text-[11px] ${ts}`}>{t('untilNextSiddhi', lang)}</p>
+        <div className={`${statCard} rounded-2xl p-4 sm:p-5 transition-all duration-300 group cursor-default hover:-translate-y-0.5`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className={`text-[11px] font-medium ${ts}`}>{t('untilNextSiddhi', lang)}</p>
+              <p className={`text-[22px] font-black mt-0.5 ${tp}`}>{nextAchievement ? Math.max(0, nextAchievement.xpRequired - totalXp) : 0}</p>
+              <p className={`text-[11px] mt-0.5 ${tm}`}>{t('nextSiddhi', lang)}</p>
+            </div>
+            <span className="text-xl opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all">🎯</span>
+          </div>
         </div>
       </div>
 
@@ -296,13 +315,12 @@ export function Achievements({ achievements, stats, quests, notes, onShareAchiev
               >
                 {onShareAchievement && (
                   <button
-                    className={`absolute right-3 top-3 inline-flex items-center justify-center h-8 w-8 rounded-xl border transition-all ${
-                      isModern
+                    className={`absolute right-3 top-3 inline-flex items-center justify-center h-8 w-8 rounded-xl border transition-all ${isModern
                         ? 'bg-[var(--kq-surface)] border-[var(--kq-border)] hover:bg-[var(--kq-bg2)]'
                         : isDark
                           ? 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06]'
                           : 'bg-white/70 border-slate-200/40 hover:bg-white'
-                    }`}
+                      }`}
                     title="Share"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -337,13 +355,12 @@ export function Achievements({ achievements, stats, quests, notes, onShareAchiev
                 <div className="flex items-start justify-between gap-2">
                   <div className={`text-3xl ${isModern ? 'opacity-90' : 'opacity-90 blur-[0.8px]'}`}>{a.icon}</div>
                   <span
-                    className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold ${
-                      isModern
+                    className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold ${isModern
                         ? 'text-[var(--kq-text-muted)] border border-[var(--kq-border)] bg-[var(--kq-bg2)]'
                         : isDark
                           ? 'text-slate-500 bg-white/[0.04]'
                           : 'text-slate-500 bg-slate-50'
-                    }`}
+                      }`}
                   >
                     🔒 {getRarityLabel(a.rarity)}
                   </span>
@@ -355,13 +372,12 @@ export function Achievements({ achievements, stats, quests, notes, onShareAchiev
                 <div className="mt-2">
                   {items.length === 0 ? (
                     <span
-                      className={`inline-block mt-1.5 px-2 py-0.5 rounded text-[9px] font-semibold ${
-                        isModern
+                      className={`inline-block mt-1.5 px-2 py-0.5 rounded text-[9px] font-semibold ${isModern
                           ? 'text-[var(--kq-text-muted)] border border-[var(--kq-border)] bg-[var(--kq-bg2)]'
                           : isDark
                             ? 'text-slate-600 bg-white/[0.03]'
                             : 'text-slate-400 bg-slate-50'
-                      }`}
+                        }`}
                     >
                       {a.xpRequired} {t('punyaNeeded', lang)}
                     </span>

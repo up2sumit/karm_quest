@@ -43,6 +43,8 @@ import { questTemplates, type QuestTemplateId } from './templates/questTemplates
 import { SupabaseTest } from "./components/SupabaseTest";
 import { logActivity } from './lib/activity';
 import { supabase } from './lib/supabase';
+import { applyXpGain, uniqueId } from './utils/xp';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // ── Particles ────────────────────────────────────────────────────────────────
 // Geometry is computed once (stable). Palette changes with theme.
@@ -63,14 +65,10 @@ function Particles() {
     []
   );
 
+  // Use theme tokens so particles match every theme (warm light uses saffron/orange).
   const palette = useMemo(
-    () =>
-      isModern
-        ? ['#1F5E5A', '#2F3A39', '#D7D0C6', '#1F5E5A']
-        : (isDark || isHinglish)
-          ? ['#6366F1', '#818CF8', '#A78BFA', '#4F46E5']
-          : ['#6366F1', '#8B5CF6', '#A78BFA', '#C4B5FD'],
-    [isDark, isHinglish, isModern]
+    () => ['var(--kq-xp-start)', 'var(--kq-primary)', 'var(--kq-xp-end)', 'var(--kq-violet)'],
+    []
   );
 
   return (
@@ -86,7 +84,7 @@ function Particles() {
             background: palette[p.colorIdx],
             animationDuration: `${p.durS}s`,
             animationDelay: `${p.delS}s`,
-            opacity: isModern ? 0.045 : isDark ? 0.15 : 0.1,
+            opacity: isModern ? 0.045 : (isDark || isHinglish) ? 0.15 : 0.08,
           }}
         />
       ))}
@@ -96,7 +94,8 @@ function Particles() {
 
 function SubtlePattern() {
   const { isDark, isModern } = useTheme();
-  const stroke = isModern ? '#D7D0C6' : '#6366F1';
+  // Token-driven stroke so light theme isn't forced into indigo.
+  const stroke = isModern ? 'var(--kq-border2)' : 'var(--kq-primary)';
 
   if (isModern) {
     // Calm, editorial paper-grid (no mandala / no glow)
@@ -152,15 +151,10 @@ function XPPopup({ xp, kind, onDone }: { xp: number; kind: 'quest' | 'focus'; on
   return (
     <div className="fixed top-20 right-4 md:right-8 z-50 animate-slide-up">
       <div
-        className={`px-5 py-2.5 rounded-xl flex items-center gap-2.5 shadow-xl ${
-          isModern
-            ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] text-[var(--kq-text-primary)]'
-            : isHinglish
-              ? 'bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)] text-white'
-              : isDark
-                ? 'bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)] text-white'
-                : 'bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)] text-white'
-        }`}
+        className={`px-5 py-2.5 rounded-xl flex items-center gap-2.5 shadow-xl ${isModern
+          ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] text-[var(--kq-text-primary)]'
+          : 'bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)] text-white'
+          }`}
       >
         <span className="text-xl animate-coin-bounce inline-block">{isFocus ? '⏱️' : (isModern ? '✅' : (isHinglish ? '🎉' : '🪔'))}</span>
         <div>
@@ -311,7 +305,10 @@ function applyRecurringResets(list: Quest[]): Quest[] {
     if (recurring === 'none') return q;
     if (q.status !== 'completed') return q;
 
-    const completedAt = (q.completedAt || '').trim();
+    // B13 fix: normalize completedAt to date-only (YYYY-MM-DD) for comparison,
+    // since cloud sync may store it as a full ISO timestamp.
+    const rawCompletedAt = (q.completedAt || '').trim();
+    const completedAt = rawCompletedAt.length > 10 ? rawCompletedAt.slice(0, 10) : rawCompletedAt;
 
     if (recurring === 'daily') {
       // Completed before today -> reactivate
@@ -507,30 +504,30 @@ function AppContent() {
   const [bootReady, setBootReady] = useState(false);
 
   // ── Challenges state (progress + claimed rewards) ──────────────────────
-type ChallengeState = {
-  dailyKey: string;    // YYYY-MM-DD
-  weeklyKey: string;   // weekStartISO()
-  dailyNotes: number;
-  dailyFocus: number;
-  weeklyNotes: number;
-  weeklyXp: number;
-  claimed: Record<string, boolean>;
-};
+  type ChallengeState = {
+    dailyKey: string;    // YYYY-MM-DD
+    weeklyKey: string;   // weekStartISO()
+    dailyNotes: number;
+    dailyFocus: number;
+    weeklyNotes: number;
+    weeklyXp: number;
+    claimed: Record<string, boolean>;
+  };
 
-const DAILY_CHALLENGE_IDS = useMemo(() => new Set(['1', '2', '3', '4']), []);
-const WEEKLY_CHALLENGE_IDS = useMemo(() => new Set(['5', '6', '7']), []);
+  const DAILY_CHALLENGE_IDS = useMemo(() => new Set(['1', '2', '3', '4']), []);
+  const WEEKLY_CHALLENGE_IDS = useMemo(() => new Set(['5', '6', '7']), []);
 
-const defaultChallengeState: ChallengeState = useMemo(() => ({
-  dailyKey: todayISO(),
-  weeklyKey: weekStartISO(),
-  dailyNotes: 0,
-  dailyFocus: 0,
-  weeklyNotes: 0,
-  weeklyXp: 0,
-  claimed: {},
-}), []);
+  const defaultChallengeState: ChallengeState = useMemo(() => ({
+    dailyKey: todayISO(),
+    weeklyKey: weekStartISO(),
+    dailyNotes: 0,
+    dailyFocus: 0,
+    weeklyNotes: 0,
+    weeklyXp: 0,
+    claimed: {},
+  }), []);
 
-const [challengeState, setChallengeState] = useState<ChallengeState>(defaultChallengeState);
+  const [challengeState, setChallengeState] = useState<ChallengeState>(defaultChallengeState);
 
   // Notes: normalize createdAt to ISO so Supabase (timestamptz) can store it reliably.
   const normalizeNoteCreatedAt = useCallback((v: unknown): string => {
@@ -555,11 +552,11 @@ const [challengeState, setChallengeState] = useState<ChallengeState>(defaultChal
     return new Date().toISOString();
   }, []);
 
-const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<string>) => {
-  const next = { ...(claimed || {}) };
-  ids.forEach((id) => { delete next[id]; });
-  return next;
-}, []);
+  const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<string>) => {
+    const next = { ...(claimed || {}) };
+    ids.forEach((id) => { delete next[id]; });
+    return next;
+  }, []);
 
 
   // Focus Timer (Pomodoro)
@@ -940,18 +937,18 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
           const subtasksRaw = (q as any).subtasks;
           const subtasks: SubTask[] = Array.isArray(subtasksRaw)
             ? subtasksRaw
-                .filter(Boolean)
-                .map((st: any, idx: number) => ({
-                  id: typeof st.id === 'string' ? st.id : `${String((q as any).id || 'q')}-${idx}`,
-                  text: String(st.text || ''),
-                  done: !!st.done,
-                }))
+              .filter(Boolean)
+              .map((st: any, idx: number) => ({
+                id: typeof st.id === 'string' ? st.id : `${String((q as any).id || 'q')}-${idx}`,
+                text: String(st.text || ''),
+                done: !!st.done,
+              }))
             : [];
           const badge = typeof (q as any).badge === 'string' ? (q as any).badge : 'none';
-    
+
           // If a recurring quest is marked completed but has no completedAt, assume it was completed today
           const safeCompletedAt = status === 'completed' && recurring !== 'none' && !completedAt ? todayISO() : completedAt;
-    
+
           return {
             ...q,
             recurring,
@@ -963,7 +960,7 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
         })
       );
     }
-    
+
     if (Array.isArray(s.notes)) {
       setNotes(
         (s.notes as any[]).filter(Boolean).map((n: any, idx: number) => ({
@@ -977,16 +974,16 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
           updatedAt: n.updatedAt ? normalizeNoteCreatedAt(n.updatedAt) : undefined,
           revisions: Array.isArray(n.revisions)
             ? n.revisions
-                .filter(Boolean)
-                .map((r: any) => ({
-                  editedAt: normalizeNoteCreatedAt(r.editedAt),
-                  title: String(r.title || ''),
-                  content: String(r.content || ''),
-                  tags: Array.isArray(r.tags) ? r.tags.map((x: any) => String(x)).filter(Boolean) : [],
-                  color: typeof r.color === 'string' ? r.color : (noteColors[0] || '#6366F1'),
-                  emoji: typeof r.emoji === 'string' ? r.emoji : '📜',
-                }))
-                .slice(0, 25)
+              .filter(Boolean)
+              .map((r: any) => ({
+                editedAt: normalizeNoteCreatedAt(r.editedAt),
+                title: String(r.title || ''),
+                content: String(r.content || ''),
+                tags: Array.isArray(r.tags) ? r.tags.map((x: any) => String(x)).filter(Boolean) : [],
+                color: typeof r.color === 'string' ? r.color : (noteColors[0] || '#6366F1'),
+                emoji: typeof r.emoji === 'string' ? r.emoji : '📜',
+              }))
+              .slice(0, 25)
             : undefined,
           emoji: typeof n.emoji === 'string' ? n.emoji : '📜',
         }))
@@ -994,28 +991,28 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
     }
     if (Array.isArray(s.achievements)) setAchievements(s.achievements);
     if (Array.isArray(s.notifications)) setNotifications(s.notifications);
-    
+
     if (typeof (s as any).sfxEnabled === 'boolean') setSfxEnabled((s as any).sfxEnabled);
-    
+
     // Challenges state migration
     const csAny = (s as any).challengeState;
     if (csAny && typeof csAny === 'object') {
-    const any = csAny as any;
-    const dailyKey = typeof any.dailyKey === 'string' ? any.dailyKey : todayISO();
-    const weeklyKey = typeof any.weeklyKey === 'string' ? any.weeklyKey : weekStartISO();
-    setChallengeState({
-    dailyKey,
-    weeklyKey,
-    dailyNotes: typeof any.dailyNotes === 'number' ? any.dailyNotes : 0,
-    dailyFocus: typeof any.dailyFocus === 'number' ? any.dailyFocus : 0,
-    weeklyNotes: typeof any.weeklyNotes === 'number' ? any.weeklyNotes : 0,
-    weeklyXp: typeof any.weeklyXp === 'number' ? any.weeklyXp : 0,
-    claimed: (any.claimed && typeof any.claimed === 'object') ? any.claimed : {},
-    });
+      const any = csAny as any;
+      const dailyKey = typeof any.dailyKey === 'string' ? any.dailyKey : todayISO();
+      const weeklyKey = typeof any.weeklyKey === 'string' ? any.weeklyKey : weekStartISO();
+      setChallengeState({
+        dailyKey,
+        weeklyKey,
+        dailyNotes: typeof any.dailyNotes === 'number' ? any.dailyNotes : 0,
+        dailyFocus: typeof any.dailyFocus === 'number' ? any.dailyFocus : 0,
+        weeklyNotes: typeof any.weeklyNotes === 'number' ? any.weeklyNotes : 0,
+        weeklyXp: typeof any.weeklyXp === 'number' ? any.weeklyXp : 0,
+        claimed: (any.claimed && typeof any.claimed === 'object') ? any.claimed : {},
+      });
     } else {
-    setChallengeState(defaultChallengeState);
+      setChallengeState(defaultChallengeState);
     }
-    
+
     if (s.stats && typeof s.stats === 'object') {
       const stAny = s.stats as Partial<UserStats> & Record<string, unknown>;
       const migrated: UserStats = {
@@ -1040,7 +1037,7 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
       };
       setStats(migrated);
     }
-    
+
     // Shop migration
     if (s.shop && typeof s.shop === 'object') {
       const any = s.shop as any;
@@ -1050,7 +1047,7 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
       const equippedFrame = typeof any.equippedFrame === 'string' ? any.equippedFrame : defaultShopState.equippedFrame;
       const equippedSkin = typeof any.equippedSkin === 'string' ? any.equippedSkin : defaultShopState.equippedSkin;
       const activeBoost = normalizeBoost(any.activeBoost);
-    
+
       setShop({
         ownedFrames: ownedFrames.length ? ownedFrames : defaultShopState.ownedFrames,
         equippedFrame: ownedFrames.includes(equippedFrame) ? equippedFrame : (ownedFrames[0] || 'none'),
@@ -1060,8 +1057,8 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
         activeBoost,
       });
     }
-    
-    
+
+
     // Focus session migration
     const fsAny = (s as any).focusSession;
     if (fsAny && typeof fsAny === 'object') {
@@ -1075,7 +1072,7 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
         setFocusSession({ questId, startedAt, endsAt, durationMs, bonusXp, awarded });
       } else {
         setFocusSession(null);
-      setBreakSession(null);
+        setBreakSession(null);
       }
     } else {
       setFocusSession(null);
@@ -1113,45 +1110,45 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
     if (!guestMode || userId) return;
     if (!guestBooting) return;
     if (!hydrated) return;
-      // Fresh guest profile (local-only)
-      setStats({
-        level: 1,
-        xp: 0,
-        xpToNext: 100,
-        totalXpEarned: 0,
-        coins: 0,
-        streak: 0,
-        streakRecord: 0,
-        lastActiveDate: '',
-        lastDailyChallengeNotified: '',
-        questsCompleted: 0,
-        totalQuests: defaultQuests.length,
-        avatarEmoji: '🧘',
-        username: 'Guest',
-      });
+    // Fresh guest profile (local-only)
+    setStats({
+      level: 1,
+      xp: 0,
+      xpToNext: 100,
+      totalXpEarned: 0,
+      coins: 0,
+      streak: 0,
+      streakRecord: 0,
+      lastActiveDate: '',
+      lastDailyChallengeNotified: '',
+      questsCompleted: 0,
+      totalQuests: defaultQuests.length,
+      avatarEmoji: '🧘',
+      username: 'Guest',
+    });
 
-      // Sample quests, but start them as "active" (no retroactive completions).
-      setQuests(
-        defaultQuests.map((q) => ({
-          ...q,
-          status: 'active',
-          completedAt: '',
-          earnedXp: undefined,
-          subtasks: resetSubtasks(q.subtasks),
-        }))
-      );
+    // Sample quests, but start them as "active" (no retroactive completions).
+    setQuests(
+      defaultQuests.map((q) => ({
+        ...q,
+        status: 'active',
+        completedAt: '',
+        earnedXp: undefined,
+        subtasks: resetSubtasks(q.subtasks),
+      }))
+    );
 
-      // Optional onboarding content
-      setNotes(defaultNotes);
-      // Keep achievements available but start locked for a true fresh guest session.
-      setAchievements(defaultAchievements.map((a) => ({ ...a, unlocked: false })));
+    // Optional onboarding content
+    setNotes(defaultNotes);
+    // Keep achievements available but start locked for a true fresh guest session.
+    setAchievements(defaultAchievements.map((a) => ({ ...a, unlocked: false })));
 
-      setShop(defaultShopState);
-      setNotifications([]);
-      setFocusSession(null);
-      setBreakSession(null);
-      setChallengeState(defaultChallengeState);
-      setCurrentPage('dashboard');
+    setShop(defaultShopState);
+    setNotifications([]);
+    setFocusSession(null);
+    setBreakSession(null);
+    setChallengeState(defaultChallengeState);
+    setCurrentPage('dashboard');
 
     setGuestBooting(false);
   }, [guestMode, userId, guestBooting, hydrated, defaultChallengeState]);
@@ -1317,41 +1314,41 @@ const stripClaimed = useCallback((claimed: Record<string, boolean>, ids: Set<str
       }
     }
 
-// Sync challenge reset keys (in case app was closed during reset)
-setChallengeState((prev) => {
-  const today = todayISO();
-  const weekKey = weekStartISO();
-  let next = prev || defaultChallengeState;
-  let changed = false;
+    // Sync challenge reset keys (in case app was closed during reset)
+    setChallengeState((prev) => {
+      const today = todayISO();
+      const weekKey = weekStartISO();
+      let next = prev || defaultChallengeState;
+      let changed = false;
 
-  if (!next || typeof next !== 'object') {
-    next = defaultChallengeState;
-    changed = true;
-  }
+      if (!next || typeof next !== 'object') {
+        next = defaultChallengeState;
+        changed = true;
+      }
 
-  if (next.dailyKey !== today) {
-    next = {
-      ...next,
-      dailyKey: today,
-      dailyNotes: 0,
-      dailyFocus: 0,
-      claimed: stripClaimed(next.claimed, DAILY_CHALLENGE_IDS),
-    };
-    changed = true;
-  }
-  if (next.weeklyKey !== weekKey) {
-    next = {
-      ...next,
-      weeklyKey: weekKey,
-      weeklyNotes: 0,
-      weeklyXp: 0,
-      claimed: stripClaimed(next.claimed, WEEKLY_CHALLENGE_IDS),
-    };
-    changed = true;
-  }
+      if (next.dailyKey !== today) {
+        next = {
+          ...next,
+          dailyKey: today,
+          dailyNotes: 0,
+          dailyFocus: 0,
+          claimed: stripClaimed(next.claimed, DAILY_CHALLENGE_IDS),
+        };
+        changed = true;
+      }
+      if (next.weeklyKey !== weekKey) {
+        next = {
+          ...next,
+          weeklyKey: weekKey,
+          weeklyNotes: 0,
+          weeklyXp: 0,
+          claimed: stripClaimed(next.claimed, WEEKLY_CHALLENGE_IDS),
+        };
+        changed = true;
+      }
 
-  return changed ? next : prev;
-});
+      return changed ? next : prev;
+    });
     // Daily challenges available (once per day)
     const today = todayISO();
     if (stats.lastDailyChallengeNotified !== today) {
@@ -1469,6 +1466,7 @@ setChallengeState((prev) => {
   const handleNavigate = useCallback((page: Page) => {
     setCurrentPage(page);
     setMobileOpen(false);
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
   const openAchievementShare = useCallback((a: Achievement) => {
@@ -1569,24 +1567,24 @@ setChallengeState((prev) => {
       const nextQuestsForCriteria = quests.map((q) =>
         q.id === id
           ? ({
-              ...q,
-              status: 'completed' as const,
-              completedAt: doneDate,
-              completedAtTs: completionTs,
-              earnedXp: xpEarned,
-            } as Quest)
+            ...q,
+            status: 'completed' as const,
+            completedAt: doneDate,
+            completedAtTs: completionTs,
+            earnedXp: xpEarned,
+          } as Quest)
           : q
       );
       setQuests((prev) =>
         prev.map((q) =>
           q.id === id
             ? ({
-                ...q,
-                status: 'completed' as const,
-                completedAt: doneDate,
-                completedAtTs: completionTs,
-                earnedXp: xpEarned,
-              } as Quest)
+              ...q,
+              status: 'completed' as const,
+              completedAt: doneDate,
+              completedAtTs: completionTs,
+              earnedXp: xpEarned,
+            } as Quest)
             : q
         )
       );
@@ -1605,18 +1603,9 @@ setChallengeState((prev) => {
 
       const nextStreakRecord = Math.max(stats.streakRecord || 0, newStreak);
 
-      // XP / level calc (supports multi-level jumps)
-      let newXp = stats.xp + xpEarned;
-      const newTotalXp = (stats.totalXpEarned ?? stats.xp) + xpEarned;
-      let newLevel = stats.level;
-      let newXpToNext = stats.xpToNext;
-      let didLevelUp = false;
-      while (newXp >= newXpToNext) {
-        newXp -= newXpToNext;
-        newLevel++;
-        newXpToNext = Math.round(newXpToNext * 1.2);
-        didLevelUp = true;
-      }
+      // XP / level calc (shared utility — B5 fix)
+      const { xp: newXp, xpToNext: newXpToNext, level: newLevel, totalXpEarned: newTotalXp, didLevelUp } =
+        applyXpGain(stats.xp, stats.xpToNext, stats.level, stats.totalXpEarned ?? stats.xp, xpEarned);
 
       const nextStats: UserStats = {
         ...stats,
@@ -1709,12 +1698,12 @@ setChallengeState((prev) => {
 
   const handleAddQuest = useCallback(
     (quest: Omit<Quest, 'id' | 'status'>) =>
-      setQuests((prev) => [{ ...quest, id: Date.now().toString(), status: 'active' }, ...prev]),
+      setQuests((prev) => [{ ...quest, id: uniqueId(), status: 'active' }, ...prev]),
     []
   );
   const handleAddNote = useCallback((note: Omit<Note, 'id' | 'createdAt'>) => {
     const createdAt = new Date().toISOString();
-    const nextNote: Note = { ...note, id: Date.now().toString(), createdAt };
+    const nextNote: Note = { ...note, id: uniqueId(), createdAt };
 
     setNotes((prev) => [nextNote, ...prev]);
 
@@ -1745,7 +1734,7 @@ setChallengeState((prev) => {
       maybeAutoShareMoksha(unlockedNow);
     }
   }, [notes, quests, stats, achievements, addNotification, sfxEnabled, maybeAutoShareMoksha]);
-  
+
   const handleUpdateNote = useCallback(
     (id: string, patch: Partial<Pick<Note, 'title' | 'content' | 'tags' | 'color' | 'emoji'>>) => {
       const now = new Date().toISOString();
@@ -1774,7 +1763,7 @@ setChallengeState((prev) => {
     []
   );
 
-const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.filter((n) => n.id !== id)), []);
+  const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.filter((n) => n.id !== id)), []);
 
   // ── Profile actions ─────────────────────────────────────────────────────
   const handleExportData = useCallback(() => {
@@ -1792,6 +1781,8 @@ const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.fil
         notifications,
         shop,
         focusSession,
+        challengeState,
+        weeklyReports,
       },
     };
 
@@ -1804,7 +1795,7 @@ const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.fil
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  }, [quests, notes, stats, achievements, notifications, shop, focusSession, isDark, isHinglish, sfxEnabled]);
+  }, [quests, notes, stats, achievements, notifications, shop, focusSession, isDark, isHinglish, sfxEnabled, challengeState, weeklyReports]);
 
   const handleImportData = useCallback(
     async (file: File) => {
@@ -2052,7 +2043,7 @@ const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.fil
         addNotification(makeNotification('level_up', 'XP Boost Activated ⚡', `${mult}× XP for the next hour. Go grind!`));
       }
     },
-    [shop, stats.coins, addNotification, lang, isHinglish]
+    [shop, stats.coins, addNotification, coinWord, tasksWord]
   );
 
   const startFocus = useCallback(
@@ -2100,6 +2091,32 @@ const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.fil
   }, [focusSession, addNotification]);
 
 
+  // Cancel/Delete an active task:
+  // - removed from UI and local state
+  // - removed from backend on next sync (tasks table mirrors local state)
+  // - no coins / XP are awarded
+  // NOTE: Completed tasks are not deletable (they remain for history + backend).
+  const handleDeleteQuest = useCallback((id: string) => {
+    const q = quests.find((x) => x.id === id);
+    if (!q) return;
+    if (q.status === 'completed') return;
+
+    if (focusSession?.questId === id) {
+      stopFocus('Task cancelled. Focus ended.');
+    }
+
+    setQuests((prev) => prev.filter((x) => x.id !== id));
+
+    addNotification(
+      makeNotification(
+        'quest_complete',
+        isPro ? 'Task deleted' : 'Quest cancelled',
+        `"${q.title}" removed. No ${coinWord} awarded.`
+      )
+    );
+  }, [quests, focusSession, stopFocus, addNotification, isPro, coinWord]);
+
+
   const startBreak = useCallback(
     (kind: 'short' | 'long') => {
       const now = Date.now();
@@ -2138,18 +2155,9 @@ const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.fil
       }
       const title = q.title;
 
-      // XP / level calc (supports multi-level jumps)
-      let newXp = stats.xp + bonusXp;
-      const newTotalXp = (stats.totalXpEarned ?? stats.xp) + bonusXp;
-      let newLevel = stats.level;
-      let newXpToNext = stats.xpToNext;
-      let didLevelUp = false;
-      while (newXp >= newXpToNext) {
-        newXp -= newXpToNext;
-        newLevel++;
-        newXpToNext = Math.round(newXpToNext * 1.2);
-        didLevelUp = true;
-      }
+      // XP / level calc (shared utility — B5 fix)
+      const { xp: newXp, xpToNext: newXpToNext, level: newLevel, totalXpEarned: newTotalXp, didLevelUp } =
+        applyXpGain(stats.xp, stats.xpToNext, stats.level, stats.totalXpEarned ?? stats.xp, bonusXp);
 
       setStats((prev) => ({
         ...prev,
@@ -2263,20 +2271,20 @@ const handleDeleteNote = useCallback((id: string) => setNotes((prev) => prev.fil
     addNotification(makeNotification('focus', 'Break complete ✅', 'Ready for the next session.'));
   }, [hydrated, breakSession, addNotification]);
 
-// ── Challenge reward claims ────────────────────────────────────────────
-const handleClaimChallenge = useCallback((challengeId: string, reward: number) => {
-  setChallengeState((prev) => ({
-    ...prev,
-    claimed: { ...(prev.claimed || {}), [challengeId]: true },
-  }));
-  setStats((prev) => ({ ...prev, coins: prev.coins + reward }));
-  addNotification(makeNotification(
-    'achievement',
-    isPro ? 'Reward claimed 🪙' : 'Challenge claimed 🪙',
-    isPro ? `+${reward} ${coinWord} added.` : `+${reward} Mudras added to your wallet.`
-  ));
-  sfx.play('coin', sfxEnabled);
-}, [addNotification, sfxEnabled, lang, isHinglish]);
+  // ── Challenge reward claims ────────────────────────────────────────────
+  const handleClaimChallenge = useCallback((challengeId: string, reward: number) => {
+    setChallengeState((prev) => ({
+      ...prev,
+      claimed: { ...(prev.claimed || {}), [challengeId]: true },
+    }));
+    setStats((prev) => ({ ...prev, coins: prev.coins + reward }));
+    addNotification(makeNotification(
+      'achievement',
+      isPro ? 'Reward claimed 🪙' : 'Challenge claimed 🪙',
+      isPro ? `+${reward} ${coinWord} added.` : `+${reward} Mudras added to your wallet.`
+    ));
+    sfx.play('coin', sfxEnabled);
+  }, [addNotification, sfxEnabled, isPro, coinWord]);
 
   const renderPage = () => {
     switch (currentPage) {
@@ -2301,6 +2309,7 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
             onComplete={handleCompleteQuest}
             onAdd={handleAddQuest}
             onUpdate={handleUpdateQuest}
+            onDelete={handleDeleteQuest}
             ownedBadges={shop.ownedBadges}
             searchQuery={globalSearch}
             focusQuestId={focusQuestId}
@@ -2389,13 +2398,13 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
     }
   };
 
-  const bgGradient = isModern
+  // Use theme tokens for backgrounds so each theme controls the overall feel.
+  // Theme 1 (Saffron Light) becomes warm/cream, Theme 3 becomes light blue/violet, Theme 4 stays deep indigo.
+  const bgGradient = theme === 'modern'
     ? 'bg-[var(--kq-bg)]'
-    : isHinglish
-      ? 'bg-gradient-to-br from-[#0D0D1A] via-[#111122] to-[#0D0D1A]'
-      : isDark
-        ? 'bg-gradient-to-br from-[#0D0D1A] via-[#111122] to-[#0D0D1A]'
-        : 'bg-gradient-to-br from-[#F7F8FC] via-[#F0F2F8] to-[#F5F3FF]';
+    : theme === 'hinglish'
+      ? 'bg-gradient-to-br from-[var(--kq-bg)] via-[var(--kq-bg2)] to-[var(--kq-bg)]'
+      : 'bg-gradient-to-br from-[var(--kq-bg)] via-[var(--kq-bg2)] to-[var(--kq-bg3)]';
   // ── Auth gate ─────────────────────────────────────────────────────────
   // Hooks above must run on every render. Only return conditionally *after* hooks.
   if (publicUsername) {
@@ -2412,7 +2421,7 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
 
   if (authLoading) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center px-4 py-10 text-sm text-[var(--kq-text-muted)]">
+      <div className="min-h-[70vh] flex items-center justify-center px-4 py-10 text-sm text-slate-500">
         Loading...
       </div>
     );
@@ -2420,7 +2429,7 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
 
   if (!userId && guestMode && guestBooting) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center px-4 py-10 text-sm text-[var(--kq-text-muted)]">
+      <div className="min-h-[70vh] flex items-center justify-center px-4 py-10 text-sm text-slate-500">
         Setting up guest profile...
       </div>
     );
@@ -2497,12 +2506,12 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
         cloudStatus={
           userId
             ? {
-                connected: cloud.remoteHydrated,
-                saving: cloud.saving || tasksCloud.syncing,
-                queued: cloud.queued || xpQueueCount > 0,
-                error: cloud.error ?? tasksCloud.error,
-                lastSyncedAt: cloud.lastSyncedAt ?? null,
-              }
+              connected: cloud.remoteHydrated,
+              saving: cloud.saving || tasksCloud.syncing,
+              queued: cloud.queued || xpQueueCount > 0,
+              error: cloud.error ?? tasksCloud.error,
+              lastSyncedAt: cloud.lastSyncedAt ?? null,
+            }
             : { connected: false, saving: false, queued: false, error: null, lastSyncedAt: null }
         }
         onOpenAuth={!userId ? () => setGuestMode(false) : undefined}
@@ -2525,7 +2534,7 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
       />
 
       <main
-        className="relative z-10 transition-all duration-300 pt-16 md:pt-20 pb-24 md:pb-8 kq-page"
+        className="relative z-10 transition-all duration-300 pt-16 md:pt-20 pb-24 md:pb-8 px-4 md:px-6"
         style={{ marginLeft: sidebarOffsetPx }}
       >
         {renderPage()}
@@ -2553,10 +2562,12 @@ const handleClaimChallenge = useCallback((challengeId: string, reward: number) =
 
 export function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

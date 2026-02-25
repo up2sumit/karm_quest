@@ -49,27 +49,23 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
   const [title, setTitle] = useState<string>('');
   const [msg, setMsg] = useState<string | null>(null);
 
+  const darkLike = isDark || isHinglish;
+
   const card = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-sm'
-    : isHinglish
-      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
-      : isDark
-        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] shadow-sm'
-        : 'bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm';
-  const tp = isModern ? 'text-[var(--kq-text-primary)]' : isHinglish ? 'text-slate-900' : isDark ? 'text-slate-100' : 'text-slate-900';
-  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+    : darkLike
+      ? 'bg-white/[0.04] backdrop-blur-xl border border-white/[0.06] shadow-sm'
+      : 'bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm';
+  const tp = isModern ? 'text-[var(--kq-text-primary)]' : darkLike ? 'text-slate-100' : 'text-slate-900';
+  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : darkLike ? 'text-slate-400' : 'text-slate-500';
   const btnPrimary = isModern
     ? 'bg-[var(--kq-primary)] hover:bg-[var(--kq-primary-light)]'
-    : isHinglish
-      ? 'bg-gradient-to-r from-indigo-500 to-violet-500'
-      : 'bg-gradient-to-r from-indigo-500 to-violet-500';
+    : 'bg-gradient-to-r from-indigo-500 to-violet-500';
   const btnSoft = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] hover:bg-[var(--kq-primary-soft)]'
-    : isHinglish
-      ? 'bg-white/70 border border-indigo-200/30 hover:bg-white'
-      : isDark
-        ? 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]'
-        : 'bg-white/70 border border-slate-200/60 hover:bg-white';
+    : darkLike
+      ? 'bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06]'
+      : 'bg-white/70 border border-slate-200/60 hover:bg-white';
 
   const entityOptions = useMemo(() => {
     if (entityType === 'task') {
@@ -175,21 +171,19 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
             <div className="mt-2 flex gap-2 flex-wrap">
               <button
                 onClick={() => { setEntityType('task'); setEntityId(''); }}
-                className={`px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
-                  entityType === 'task'
-                    ? `${btnPrimary} text-white`
-                    : isDark ? 'bg-white/[0.02] border border-white/[0.06] text-slate-400' : 'bg-white border border-slate-200/60 text-slate-600'
-                }`}
+                className={`px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${entityType === 'task'
+                  ? `${btnPrimary} text-white`
+                  : isDark ? 'bg-white/[0.02] border border-white/[0.06] text-slate-400' : 'bg-white border border-slate-200/60 text-slate-600'
+                  }`}
               >
                 {lang === 'pro' ? 'Task' : (isHinglish ? 'Quest' : 'Quest')}
               </button>
               <button
                 onClick={() => { setEntityType('note'); setEntityId(''); }}
-                className={`px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
-                  entityType === 'note'
-                    ? `${btnPrimary} text-white`
-                    : isDark ? 'bg-white/[0.02] border border-white/[0.06] text-slate-400' : 'bg-white border border-slate-200/60 text-slate-600'
-                }`}
+                className={`px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${entityType === 'note'
+                  ? `${btnPrimary} text-white`
+                  : isDark ? 'bg-white/[0.02] border border-white/[0.06] text-slate-400' : 'bg-white border border-slate-200/60 text-slate-600'
+                  }`}
               >
                 {isHinglish ? 'Note' : 'Note'}
               </button>
@@ -198,13 +192,10 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
             <select
               value={entityId}
               onChange={(e) => setEntityId(e.target.value)}
-              className={`mt-3 w-full px-3 py-2 rounded-xl text-[13px] outline-none ${
-                isHinglish
-                  ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
-                  : isDark
-                    ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
-                    : 'bg-white/70 border border-slate-200/60 text-slate-900'
-              }`}
+              className={`mt-3 w-full px-3 py-2 rounded-xl text-[13px] outline-none ${darkLike
+                ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
+                : 'bg-white/70 border border-slate-200/60 text-slate-900'
+                }`}
             >
               <option value="">{isHinglish ? 'Select…' : 'Select…'}</option>
               {entityOptions.map((o) => (
@@ -219,13 +210,10 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={isHinglish ? 'eg: Important: Submit assignment' : 'e.g., Important: Submit assignment'}
-              className={`mt-1 w-full px-3 py-2 rounded-xl text-[13px] outline-none ${
-                isHinglish
-                  ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
-                  : isDark
-                    ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
-                    : 'bg-white/70 border border-slate-200/60 text-slate-900'
-              }`}
+              className={`mt-1 w-full px-3 py-2 rounded-xl text-[13px] outline-none ${darkLike
+                ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
+                : 'bg-white/70 border border-slate-200/60 text-slate-900'
+                }`}
             />
           </div>
 
@@ -246,13 +234,10 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
                 type="datetime-local"
                 value={whenLocal}
                 onChange={(e) => setWhenLocal(e.target.value)}
-                className={`flex-1 px-3 py-2 rounded-xl text-[13px] outline-none ${
-                  isHinglish
-                    ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
-                    : isDark
-                      ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
-                      : 'bg-white/70 border border-slate-200/60 text-slate-900'
-                }`}
+                className={`flex-1 px-3 py-2 rounded-xl text-[13px] outline-none ${darkLike
+                  ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
+                  : 'bg-white/70 border border-slate-200/60 text-slate-900'
+                  }`}
               />
             </div>
 
@@ -264,7 +249,7 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
             </button>
 
             {(msg || error) ? (
-              <div className={`mt-3 text-[12px] ${String(msg || error).toLowerCase().includes('error') ? 'text-[tomato]' : (isHinglish ? 'text-indigo-700' : isDark ? 'text-amber-200' : 'text-slate-800')}`}>
+              <div className={`mt-3 text-[12px] ${String(msg || error).toLowerCase().includes('error') ? 'text-[tomato]' : (darkLike ? 'text-amber-200' : 'text-slate-800')}`}>
                 {msg || error}
               </div>
             ) : null}

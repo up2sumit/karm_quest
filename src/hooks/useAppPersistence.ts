@@ -50,14 +50,17 @@ export function useAppPersistence<T extends object>(opts: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marker]);
 
-  // Save state on change
+  // Save state on change (debounced to avoid jank from frequent writes — B4 fix)
   useEffect(() => {
     if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: APP_VERSION, snapshot: opts.snapshot }));
-    } catch {
-      // ignore quota/security errors
-    }
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: APP_VERSION, snapshot: opts.snapshot }));
+      } catch {
+        // ignore quota/security errors
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
   }, [hydrated, STORAGE_KEY, APP_VERSION, opts.snapshot]);
 
   return { hydrated };

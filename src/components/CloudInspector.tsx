@@ -57,21 +57,19 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
     return Array.isArray(list) ? list.length : 0;
   }, [states]);
 
-  const card = useMemo(() => {
-    return isHinglish
-      ? 'bg-white/85 backdrop-blur-xl border border-indigo-200/30 shadow-2xl'
-      : isDark
-        ? 'bg-[#0C0C1A]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl'
-        : 'bg-white/90 backdrop-blur-xl border border-slate-200/60 shadow-2xl';
-  }, [isDark, isHinglish]);
+  const darkLike = isDark || isHinglish;
 
-  const tp = isHinglish ? 'text-slate-900' : isDark ? 'text-slate-100' : 'text-slate-900';
-  const ts = isHinglish ? 'text-slate-600' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const btnSoft = isHinglish
-    ? 'bg-white/80 border border-indigo-200/40 hover:bg-white'
-    : isDark
-      ? 'bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06]'
-      : 'bg-white/80 border border-slate-200/70 hover:bg-white';
+  const card = useMemo(() => {
+    return darkLike
+      ? 'bg-[#0C0C1A]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl'
+      : 'bg-white/90 backdrop-blur-xl border border-slate-200/60 shadow-2xl';
+  }, [darkLike]);
+
+  const tp = darkLike ? 'text-slate-100' : 'text-slate-900';
+  const ts = darkLike ? 'text-slate-400' : 'text-slate-500';
+  const btnSoft = darkLike
+    ? 'bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.06]'
+    : 'bg-white/80 border border-slate-200/70 hover:bg-white';
 
   async function refresh() {
     setLoading(true);
@@ -239,43 +237,40 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
           <div className={`inline-flex rounded-2xl p-1 ${btnSoft}`}>
             <button
               onClick={() => setTab('user_state')}
-              className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-                tab === 'user_state'
+              className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${tab === 'user_state'
                   ? isHinglish
                     ? 'bg-indigo-500 text-white'
                     : isDark
                       ? 'bg-indigo-500 text-white'
                       : 'bg-indigo-600 text-white'
                   : ts
-              }`}
+                }`}
             >
               user_state ({states.length})
             </button>
             <button
               onClick={() => setTab('tasks')}
-              className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-                tab === 'tasks'
+              className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${tab === 'tasks'
                   ? isHinglish
                     ? 'bg-indigo-500 text-white'
                     : isDark
                       ? 'bg-indigo-500 text-white'
                       : 'bg-indigo-600 text-white'
                   : ts
-              }`}
+                }`}
             >
               tasks ({tasks.length})
             </button>
             <button
               onClick={() => setTab('attachments')}
-              className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-                tab === 'attachments'
+              className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${tab === 'attachments'
                   ? isHinglish
                     ? 'bg-indigo-500 text-white'
                     : isDark
                       ? 'bg-indigo-500 text-white'
                       : 'bg-indigo-600 text-white'
                   : ts
-              }`}
+                }`}
             >
               attachments ({attachments.length})
             </button>
@@ -431,9 +426,8 @@ export function CloudInspector({ open, onClose }: { open: boolean; onClose: () =
                           </div>
 
                           <pre
-                            className={`text-[11px] leading-relaxed rounded-2xl p-3 overflow-auto max-h-[380px] ${
-                              isDark ? 'bg-black/40 text-slate-200' : 'bg-black/[0.03] text-slate-800'
-                            }`}
+                            className={`text-[11px] leading-relaxed rounded-2xl p-3 overflow-auto max-h-[380px] ${isDark ? 'bg-black/40 text-slate-200' : 'bg-black/[0.03] text-slate-800'
+                              }`}
                           >
                             {preview}
                           </pre>

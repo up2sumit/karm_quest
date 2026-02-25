@@ -192,9 +192,8 @@ export function BossFightOverlay({ open, onClose, rewardCoins }: BossFightOverla
                 </div>
                 <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-[width] duration-300 ${
-                      isModern ? 'bg-[var(--kq-primary)]' : 'bg-gradient-to-r from-red-400 via-indigo-500 to-amber-400'
-                    }`}
+                    className={`h-full rounded-full transition-[width] duration-300 ${isModern ? 'bg-[var(--kq-primary)]' : 'bg-gradient-to-r from-red-400 via-indigo-500 to-amber-400'
+                      }`}
                     style={{ width: `${Math.max(0, Math.min(100, healthPct))}%` }}
                   />
                 </div>
@@ -224,9 +223,8 @@ export function BossFightOverlay({ open, onClose, rewardCoins }: BossFightOverla
 
             {/* Reward */}
             <div
-              className={`mt-5 transition-all ${
-                phase === 'reward' ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
-              } kq-boss-reward`}
+              className={`mt-5 transition-all ${phase === 'reward' ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
+                } kq-boss-reward`}
             >
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4">
                 <p className="text-sm font-black text-white">{winTitle}</p>
@@ -297,7 +295,7 @@ function useConfetti(isHinglish: boolean, isDark: boolean, isModern: boolean): C
       drift: (Math.random() - 0.5) * 120,
       rotEnd: (Math.random() - 0.5) * 720,
     }));
-  }, []);
+  }, [isHinglish, isDark, isModern]);
 }
 
 function ConfettiLayer({ pieces }: { pieces: ConfettiPiece[] }) {

@@ -46,7 +46,7 @@ interface TopNavProps {
 }
 
 const themeOptions: { mode: ThemeMode; icon: string; labelKey: 'themeLight' | 'themeModern' | 'themeDark' | 'themeHinglish'; desc: string; color: string }[] = [
-  { mode: 'light',    icon: '☀️', labelKey: 'themeLight',    desc: 'Clean & minimal',                color: 'from-slate-200 to-slate-300' },
+  { mode: 'light',    icon: '☀️', labelKey: 'themeLight',    desc: 'Clean & minimal',                color: 'from-amber-200 to-orange-300' },
   { mode: 'modern',   icon: '🗒️', labelKey: 'themeModern',   desc: 'Editorial • professional',       color: 'from-teal-700 to-slate-700' },
   // Theme 3 (mode: "dark") is Chakra Rings — a LIGHT palette with blue/violet accents.
   { mode: 'dark',     icon: '🟣', labelKey: 'themeDark',     desc: 'Soft indigo • light',             color: 'from-indigo-500 to-violet-500' },
@@ -58,7 +58,8 @@ const typeAccent: Record<NotificationType, { dot: string; unreadBg: string; unre
   quest_complete:  { dot: 'bg-emerald-500', unreadBg: 'bg-emerald-50',  unreadBgDark: 'bg-emerald-500/10' },
   achievement:     { dot: 'bg-amber-500',   unreadBg: 'bg-amber-50',    unreadBgDark: 'bg-amber-500/10'   },
   streak:          { dot: 'bg-orange-500',  unreadBg: 'bg-orange-50',   unreadBgDark: 'bg-orange-500/10'  },
-  daily_challenge: { dot: 'bg-indigo-500',  unreadBg: 'bg-indigo-50',   unreadBgDark: 'bg-indigo-500/10'  },
+  // Use theme primary so Theme 1 (saffron) doesn't show indigo.
+  daily_challenge: { dot: 'bg-[var(--kq-primary)]',  unreadBg: 'bg-[var(--kq-primary-soft)]',   unreadBgDark: 'bg-[var(--kq-primary-soft)]'  },
   level_up:        { dot: 'bg-violet-500',  unreadBg: 'bg-violet-50',   unreadBgDark: 'bg-violet-500/10'  },
   focus:          { dot: 'bg-cyan-500',    unreadBg: 'bg-cyan-50',     unreadBgDark: 'bg-cyan-500/10'    },
   reminder:       { dot: 'bg-pink-500',    unreadBg: 'bg-pink-50',     unreadBgDark: 'bg-pink-500/10'    },
@@ -101,9 +102,10 @@ function NotificationPanel({ notifications, isDark, isHinglish, onMarkRead, onMa
   onMarkRead: (id: string) => void; onMarkAllRead: () => void; onClearAll: () => void; onClose: () => void;
 }) {
   const unread = notifications.filter(n => !n.read).length;
-  const panelBg = isHinglish
-    ? 'bg-white border border-indigo-200/40'
-    : isDark ? 'bg-[#13132A] border border-white/[0.08]' : 'bg-white border border-slate-200/70';
+  // Token-driven panel (Theme 4 is already handled by isDark).
+  const panelBg = isDark
+    ? 'bg-[#13132A] border border-white/[0.08]'
+    : 'bg-[var(--kq-surface)] border border-[var(--kq-border)]';
   const tp = isDark ? 'text-slate-200' : 'text-slate-800';
   const ts = isDark ? 'text-slate-500' : 'text-slate-400';
   const divider = isDark ? 'border-white/[0.05]' : 'border-slate-100';
@@ -113,10 +115,10 @@ function NotificationPanel({ notifications, isDark, isHinglish, onMarkRead, onMa
       {/* Header */}
       <div className={`flex items-center justify-between px-4 py-3 border-b ${divider}`}>
         <div className="flex items-center gap-2">
-          <Bell size={14} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+          <Bell size={14} className={isDark ? 'text-[var(--kq-primary)]' : 'text-[var(--kq-primary)]'} />
           <span className={`text-[13px] font-bold ${tp}`}>Notifications</span>
           {unread > 0 && (
-            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black text-white ${isHinglish ? 'bg-indigo-500' : 'bg-indigo-500'}`}>
+            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black text-white bg-[var(--kq-primary)]`}>
               {unread}
             </span>
           )}
@@ -124,7 +126,7 @@ function NotificationPanel({ notifications, isDark, isHinglish, onMarkRead, onMa
         <div className="flex items-center gap-0.5">
           {unread > 0 && (
             <button onClick={onMarkAllRead}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all ${isDark ? 'text-indigo-400 hover:bg-white/[0.05]' : 'text-indigo-600 hover:bg-indigo-50'}`}>
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all ${isDark ? 'text-[var(--kq-primary)] hover:bg-white/[0.05]' : 'text-[var(--kq-primary)] hover:bg-[var(--kq-primary-soft)]'}`}>
               <Check size={11} /> {isHinglish ? 'Sab padha' : 'Mark all read'}
             </button>
           )}
@@ -260,9 +262,9 @@ function SearchPanel({
   onSelect: (r: SearchResult) => void;
   onClose: () => void;
 }) {
-  const panelBg = isHinglish
-    ? 'bg-white border border-indigo-200/40'
-    : isDark ? 'bg-[#13132A] border border-white/[0.08]' : 'bg-white border border-slate-200/70';
+  const panelBg = isDark
+    ? 'bg-[#13132A] border border-white/[0.08]'
+    : 'bg-[var(--kq-surface)] border border-[var(--kq-border)]';
   const tp = isDark ? 'text-slate-200' : 'text-slate-800';
   const ts = isDark ? 'text-slate-500' : 'text-slate-500';
   const divider = isDark ? 'border-white/[0.05]' : 'border-slate-100';
@@ -271,7 +273,7 @@ function SearchPanel({
     <div className={`absolute left-0 top-full mt-2 w-[420px] max-w-[calc(100vw-16px)] rounded-2xl shadow-2xl overflow-hidden animate-slide-up z-50 backdrop-blur-xl ${panelBg}`}>
       <div className={`flex items-center justify-between px-4 py-3 border-b ${divider}`}>
         <div className="flex items-center gap-2">
-          <Search size={14} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+          <Search size={14} className={'text-[var(--kq-primary)]'} />
           <span className={`text-[13px] font-bold ${tp}`}>Search</span>
           <span className={`text-[10px] font-semibold ${ts}`}>“{query.trim()}”</span>
         </div>
@@ -302,15 +304,15 @@ function SearchPanel({
                   <p className={`text-[12.5px] font-semibold truncate ${tp}`}>{r.title}</p>
                   <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-full ${
                     r.kind === 'quest'
-                      ? isHinglish ? 'bg-indigo-500/10 text-indigo-600' : isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'
-                      : isHinglish ? 'bg-violet-500/10 text-violet-600' : isDark ? 'bg-violet-500/10 text-violet-400' : 'bg-violet-50 text-violet-600'
+                      ? isDark ? 'bg-white/[0.05] text-[var(--kq-primary)]' : 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]'
+                      : isDark ? 'bg-white/[0.05] text-[var(--kq-violet)]' : 'bg-[rgba(124,58,237,0.10)] text-[var(--kq-violet)]'
                   }`}>{r.kind === 'quest' ? 'Quest' : 'Note'}</span>
                 </div>
                 <p className={`text-[11px] mt-0.5 truncate ${ts}`}>{r.meta}</p>
               </div>
               {r.kind === 'quest'
-                ? <Swords size={14} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
-                : <FileText size={14} className={isHinglish ? 'text-violet-500' : isDark ? 'text-violet-400' : 'text-violet-500'} />}
+                ? <Swords size={14} className={'text-[var(--kq-primary)]'} />
+                : <FileText size={14} className={'text-[var(--kq-violet)]'} />}
             </button>
           ))
         )}
@@ -412,27 +414,23 @@ export function TopNav({
 
   const bg = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_0_rgba(0,0,0,0.04)]'
-    : isHinglish
-      ? 'bg-white/60 backdrop-blur-xl border border-indigo-200/20'
-      : isDark ? 'bg-[#12121F]/80 backdrop-blur-xl border border-white/[0.04]'
-               : 'bg-white/70 backdrop-blur-xl border border-slate-200/50';
+    : isDark
+      ? 'bg-[#12121F]/80 backdrop-blur-xl border border-white/[0.04]'
+      : 'bg-[var(--kq-surface)] backdrop-blur-xl border border-[var(--kq-border)]';
 
   const inputBg = isModern
     ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] placeholder:text-[var(--kq-text-muted)] focus:ring-[var(--kq-primary)]/20 focus:border-[var(--kq-border2)]'
-    : isHinglish
-      ? 'bg-white/60 border border-indigo-200/30 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30 focus:border-indigo-300'
-      : isDark
-        ? 'bg-white/[0.04] border border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20 focus:border-indigo-500/30'
-        : 'bg-slate-50/80 border border-slate-200/60 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-400/20 focus:border-indigo-300';
+    : isDark
+      ? 'bg-white/[0.04] border border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-[var(--kq-primary)]/20 focus:border-white/[0.10]'
+      : 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] placeholder:text-[var(--kq-text-muted)] focus:ring-[var(--kq-primary)]/20 focus:border-[var(--kq-border2)]';
 
-  const tl  = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-700' : isDark ? 'text-slate-400' : 'text-slate-600';
-  const acc = isModern ? 'text-[var(--kq-primary)]'        : isHinglish ? 'text-indigo-500'  : isDark ? 'text-indigo-400' : 'text-indigo-500';
+  const tl  = isModern ? 'text-[var(--kq-text-secondary)]' : 'text-[var(--kq-text-secondary)]';
+  const acc = isModern ? 'text-[var(--kq-primary)]'        : 'text-[var(--kq-primary)]';
   const ib  = isModern
     ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] hover:bg-[var(--kq-bg3)]'
-    : isHinglish
-      ? 'bg-white/50 border border-indigo-200/30 hover:bg-white/80'
-      : isDark ? 'bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06]'
-               : 'bg-slate-50 border border-slate-200/40 hover:bg-slate-100';
+    : isDark
+      ? 'bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06]'
+      : 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] hover:bg-[var(--kq-bg3)]';
 
   return (
     <header
@@ -444,13 +442,13 @@ export function TopNav({
         {/* Hamburger — mobile only */}
         <button onClick={onMobileMenuOpen} aria-label="Open navigation"
           className={`flex md:hidden items-center justify-center w-8 h-8 rounded-lg shrink-0 transition-all ${ib}`}>
-          <Menu size={17} className={isDark ? 'text-slate-400' : 'text-slate-600'} />
+          <Menu size={17} className={isDark ? 'text-slate-400' : 'text-[var(--kq-text-secondary)]'} />
         </button>
 
         {/* Mini brand — mobile only */}
         <div className="flex md:hidden items-center gap-1.5 shrink-0">
           <span className="text-base">{isHinglish ? '🎉' : isModern ? '🗒️' : '🪔'}</span>
-          <span className={`text-[13px] font-black ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>KQ</span>
+          <span className={`text-[13px] font-black ${isDark ? 'text-slate-200' : 'text-[var(--kq-text-primary)]'}`}>KQ</span>
         </div>
 
         {/* Search — sm+ */}
@@ -491,31 +489,23 @@ export function TopNav({
             <span className={`text-[11px] font-semibold ${tl} whitespace-nowrap`}>{t('levelLabel', lang)} {stats.level}</span>
           </div>
           <div className="flex-1 relative min-w-[50px]">
-            <div className={`h-3 rounded-full overflow-hidden ${isHinglish ? 'bg-indigo-100/50' : isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
-              <div className={`h-full rounded-full animate-xp-fill transition-all duration-500 ${
-                isModern
-                  ? 'bg-[var(--kq-primary)]'
-                  : isHinglish
-                    ? 'bg-gradient-to-r from-indigo-400 to-violet-400'
-                    : 'bg-gradient-to-r from-indigo-500 to-violet-500'
-              }`}
+            <div className={`h-3 rounded-full overflow-hidden bg-[var(--kq-bg2)] border border-[var(--kq-border)]`}>
+              <div className={`h-full rounded-full animate-xp-fill transition-all duration-500 bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)]`}
                 style={{ width: `${xpPercent}%` }} />
             </div>
-            <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{stats.xp}/{stats.xpToNext}</span>
+            <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-[var(--kq-text-muted)]`}>{stats.xp}/{stats.xpToNext}</span>
           </div>
 
           {/* XP boost pill */}
           {boostActive && (
             <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border ${
-              isHinglish
-                ? 'bg-violet-50/70 border-violet-200/40'
-                : isDark
-                  ? 'bg-white/[0.03] border-white/[0.06]'
-                  : 'bg-indigo-50 border-indigo-200/40'
+              isDark
+                ? 'bg-white/[0.03] border-white/[0.06]'
+                : 'bg-[var(--kq-primary-soft)] border-[var(--kq-border2)]'
             }`} title="XP boost active">
               <span className="text-sm">⚡</span>
-              <span className={`text-[10px] font-black ${isHinglish ? 'text-violet-700' : isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>{xpBoost?.multiplier}×</span>
-              <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{formatMs(boostLeft)}</span>
+              <span className={`text-[10px] font-black text-[var(--kq-primary)]`}>{xpBoost?.multiplier}×</span>
+              <span className={`text-[10px] font-semibold text-[var(--kq-text-muted)]`}>{formatMs(boostLeft)}</span>
             </div>
           )}
 
@@ -557,15 +547,15 @@ export function TopNav({
         <div className="flex-1 sm:hidden" />
 
         {/* Coins — md+ */}
-        <div className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${isHinglish ? 'bg-amber-50/60 border border-amber-200/30' : isDark ? 'bg-white/[0.03] border border-white/[0.05]' : 'bg-slate-50 border border-slate-200/40'}`}>
+        <div className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${isDark ? 'bg-white/[0.03] border border-white/[0.05]' : 'bg-[var(--kq-bg2)] border border-[var(--kq-border)]'}`}>
           <span className="text-sm">🪙</span>
-          <span className={`font-semibold text-[13px] ${isHinglish ? 'text-amber-700' : isDark ? 'text-slate-300' : 'text-slate-700'}`}>{stats.coins}</span>
+          <span className={`font-semibold text-[13px] ${isDark ? 'text-slate-300' : 'text-[var(--kq-text-primary)]'}`}>{stats.coins}</span>
         </div>
 
         {/* Streak — sm+ */}
-        <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${isHinglish ? 'bg-orange-50/60 border border-orange-200/30' : isDark ? 'bg-white/[0.03] border border-white/[0.05]' : 'bg-slate-50 border border-slate-200/40'}`}>
+        <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${isDark ? 'bg-white/[0.03] border border-white/[0.05]' : 'bg-[var(--kq-bg2)] border border-[var(--kq-border)]'}`}>
           <span className="text-sm">🪔</span>
-          <span className={`font-semibold text-[13px] ${isHinglish ? 'text-orange-700' : isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          <span className={`font-semibold text-[13px] ${isDark ? 'text-slate-300' : 'text-[var(--kq-text-primary)]'}`}>
             {stats.streak}<span className="hidden lg:inline"> {t('daysLabel', lang)}</span>
           </span>
         </div>
@@ -573,37 +563,35 @@ export function TopNav({
         {/* Theme selector */}
         <div className="relative shrink-0" ref={themeRef}>
           <button onClick={() => { setShowThemeMenu(v => !v); setShowNotifPanel(false); }}
-            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border transition-all ${isHinglish ? 'bg-indigo-50/60 border-indigo-200/30 hover:bg-indigo-100/60' : isDark ? 'bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]' : 'bg-slate-50 border-slate-200/40 hover:bg-slate-100'}`}>
-            {theme === 'light'    && <Sun     size={15} className="text-slate-500" />}
+            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border transition-all ${isDark ? 'bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]' : 'bg-[var(--kq-bg2)] border-[var(--kq-border)] hover:bg-[var(--kq-bg3)]'}`}>
+            {theme === 'light'    && <Sun     size={15} className="text-[var(--kq-primary)]" />}
             {theme === 'modern'   && <FileText size={15} className="text-[var(--kq-primary)]" />}
-            {theme === 'dark'     && <Moon    size={15} className="text-slate-400" />}
-            {theme === 'hinglish' && <Palette size={15} className="text-indigo-400" />}
-            <ChevronDown size={11} className={`transition-transform ${showThemeMenu ? 'rotate-180' : ''} ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            {theme === 'dark'     && <Moon    size={15} className="text-[var(--kq-text-muted)]" />}
+            {theme === 'hinglish' && <Palette size={15} className="text-[var(--kq-primary)]" />}
+            <ChevronDown size={11} className={`transition-transform ${showThemeMenu ? 'rotate-180' : ''} ${isDark ? 'text-slate-500' : 'text-[var(--kq-text-muted)]'}`} />
           </button>
           {showThemeMenu && (
             <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl p-1.5 shadow-xl border animate-slide-up z-50 ${
               isModern
                 ? 'bg-[var(--kq-surface)] border-[var(--kq-border)]'
-                : isHinglish
-                  ? 'bg-white/95 backdrop-blur-xl border-indigo-200/30'
-                  : isDark
-                    ? 'bg-[#1A1A2E] border-white/[0.06] backdrop-blur-xl'
-                    : 'bg-white border-slate-200/50 backdrop-blur-xl'
+                : isDark
+                  ? 'bg-[#1A1A2E] border-white/[0.06] backdrop-blur-xl'
+                  : 'bg-[var(--kq-surface)] border-[var(--kq-border)] backdrop-blur-xl'
             }`}>
-              <p className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Theme</p>
+              <p className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-[var(--kq-text-muted)]'}`}>Theme</p>
               {themeOptions.map(opt => (
                 <button key={opt.mode} onClick={() => {
                     const fn = onThemeChange ?? setTheme;
                     Promise.resolve(fn(opt.mode));
                     setShowThemeMenu(false);
                   }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all text-left ${theme === opt.mode ? isDark ? 'bg-white/[0.06] ring-1 ring-indigo-500/30' : 'bg-slate-50 ring-1 ring-indigo-300/30' : isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50'}`}>
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all text-left ${theme === opt.mode ? (isDark ? 'bg-white/[0.06] ring-1 ring-white/[0.12]' : 'bg-[var(--kq-bg2)] ring-1 ring-[var(--kq-border2)]') : (isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-[var(--kq-bg2)]')}`}>
                   <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${opt.color} flex items-center justify-center text-sm shadow-sm`}>{opt.icon}</div>
                   <div className="flex-1">
-                    <p className={`text-[13px] font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{t(opt.labelKey, lang)}</p>
-                    <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{opt.desc}</p>
+                    <p className={`text-[13px] font-medium ${isDark ? 'text-slate-200' : 'text-[var(--kq-text-primary)]'}`}>{t(opt.labelKey, lang)}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-[var(--kq-text-muted)]'}`}>{opt.desc}</p>
                   </div>
-                  {theme === opt.mode && <span className={`text-xs ${isModern ? 'text-[var(--kq-primary)]' : isHinglish ? 'text-indigo-400' : 'text-indigo-400'}`}>✓</span>}
+                  {theme === opt.mode && <span className={`text-xs text-[var(--kq-primary)]`}>✓</span>}
                 </button>
               ))}
             </div>
@@ -614,10 +602,10 @@ export function TopNav({
         <div className="relative shrink-0" ref={notifRef}>
           <button onClick={() => { setShowNotifPanel(v => !v); setShowThemeMenu(false); }}
             aria-label={`${unreadCount} unread notifications`}
-            className={`relative p-2 rounded-lg border transition-all ${ib} ${showNotifPanel ? isDark ? 'bg-white/[0.08] border-indigo-500/30' : 'bg-indigo-50 border-indigo-200/60' : ''}`}>
-            <Bell size={16} className={unreadCount > 0 ? isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-500' : isDark ? 'text-slate-400' : 'text-slate-500'} />
+            className={`relative p-2 rounded-lg border transition-all ${ib} ${showNotifPanel ? (isDark ? 'bg-white/[0.08] border-white/[0.12]' : 'bg-[var(--kq-primary-soft)] border-[var(--kq-border2)]') : ''}`}>
+            <Bell size={16} className={unreadCount > 0 ? 'text-[var(--kq-primary)]' : (isDark ? 'text-slate-400' : 'text-[var(--kq-text-muted)]')} />
             {unreadCount > 0 && (
-              <span className={`absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full text-[9px] text-white font-black flex items-center justify-center ${isHinglish ? 'bg-indigo-500' : 'bg-red-500'}`}>
+              <span className={`absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full text-[9px] text-white font-black flex items-center justify-center bg-[var(--kq-primary)]`}>
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}

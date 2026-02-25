@@ -197,13 +197,12 @@ function MarkdownView({
       out.push(
         <pre
           key={`code-${p}`}
-          className={`rounded-xl p-3 my-3 overflow-auto text-[12px] leading-relaxed font-mono border ${
-            isModern
-              ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)]'
-              : isDark
-                ? 'bg-white/[0.03] border-white/[0.06] text-slate-200'
-                : 'bg-slate-50 border-slate-200 text-slate-800'
-          }`}
+          className={`rounded-xl p-3 my-3 overflow-auto text-[12px] leading-relaxed font-mono border ${isModern
+            ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)]'
+            : isDark
+              ? 'bg-white/[0.03] border-white/[0.06] text-slate-200'
+              : 'bg-slate-50 border-slate-200 text-slate-800'
+            }`}
         >
           <code>{code}</code>
         </pre>
@@ -312,23 +311,22 @@ export function NotesVault({
   const [sizePopup, setSizePopup] = useState<{ title: string; message: string } | null>(null);
   const MAX_ATTACHMENT_BYTES = 1 * 1024 * 1024; // 1MB
 
+  // Keep legacy surfaces for input/tooling UI, but make the NOTE GRID cards
+  // follow the same premium material system as the Dashboard stat cards.
+  const darkLike = isDark || isHinglish;
   const card = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_1px_rgba(0,0,0,0.04)]'
-    : isHinglish
-      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
-      : isDark
-        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-        : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
-  const tp = isModern ? 'text-[var(--kq-text-primary)]' : isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const tm = isModern ? 'text-[var(--kq-text-muted)]' : isHinglish ? 'text-slate-400' : isDark ? 'text-slate-600' : 'text-slate-400';
+    : darkLike
+      ? 'bg-white/[0.04] backdrop-blur-xl border border-white/[0.06] shadow-sm'
+      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+  const tp = isModern ? 'text-[var(--kq-text-primary)]' : darkLike ? 'text-slate-200' : 'text-slate-800';
+  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : darkLike ? 'text-slate-400' : 'text-slate-500';
+  const tm = isModern ? 'text-[var(--kq-text-muted)]' : darkLike ? 'text-slate-600' : 'text-slate-400';
   const inputCls = isModern
     ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)] placeholder:text-[var(--kq-text-muted)] focus:ring-[var(--kq-primary)]/20'
-    : isHinglish
-      ? 'bg-white/60 border-indigo-200/30 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30'
-      : isDark
-        ? 'bg-white/[0.03] border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20'
-        : 'bg-slate-50/80 border-slate-200/50 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30';
+    : darkLike
+      ? 'bg-white/[0.03] border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20'
+      : 'bg-slate-50/80 border-slate-200/50 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30';
 
   const allTags = Array.from(new Set(notes.flatMap((n) => n.tags)));
 
@@ -705,13 +703,10 @@ export function NotesVault({
           onClick={() => setSizePopup(null)}
         >
           <div
-            className={`w-full max-w-sm rounded-2xl shadow-2xl p-5 border ${
-              isHinglish
-                ? 'bg-white/90 border-indigo-200/40'
-                : isDark
-                  ? 'bg-[#16162A] border-white/[0.08]'
-                  : 'bg-white border-slate-200/60'
-            }`}
+            className={`w-full max-w-sm rounded-2xl shadow-2xl p-5 border ${darkLike
+              ? 'bg-[#16162A] border-white/[0.08]'
+              : 'bg-white border-slate-200/60'
+              }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -731,13 +726,10 @@ export function NotesVault({
             <div className="mt-4 flex justify-end">
               <button
                 onClick={() => setSizePopup(null)}
-                className={`px-4 py-2 rounded-xl text-[12px] font-semibold ${
-                  isHinglish
-                    ? 'bg-indigo-500/10 text-indigo-700'
-                    : isDark
-                      ? 'bg-white/[0.06] text-slate-200'
-                      : 'bg-slate-100 text-slate-700'
-                }`}
+                className={`px-4 py-2 rounded-xl text-[12px] font-semibold ${darkLike
+                  ? 'bg-white/[0.06] text-slate-200'
+                  : 'bg-slate-100 text-slate-700'
+                  }`}
                 type="button"
               >
                 OK
@@ -798,17 +790,16 @@ export function NotesVault({
           <Tag size={13} className={isDark ? 'text-slate-600' : 'text-slate-400'} />
           <button
             onClick={() => setSelectedTag(null)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
-              !selectedTag
-                ? isHinglish
-                  ? 'bg-indigo-500/10 text-indigo-600'
-                  : isDark
-                    ? 'bg-indigo-500/10 text-indigo-400'
-                    : 'bg-indigo-50 text-indigo-600'
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${!selectedTag
+              ? isHinglish
+                ? 'bg-indigo-500/10 text-indigo-600'
                 : isDark
-                  ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
-                  : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
-            }`}
+                  ? 'bg-indigo-500/10 text-indigo-400'
+                  : 'bg-indigo-50 text-indigo-600'
+              : isDark
+                ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
+                : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+              }`}
             type="button"
           >
             {t('all', lang)}
@@ -817,17 +808,16 @@ export function NotesVault({
             <button
               key={tag}
               onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
-                selectedTag === tag
-                  ? isHinglish
-                    ? 'bg-indigo-500/10 text-indigo-600'
-                    : isDark
-                      ? 'bg-indigo-500/10 text-indigo-400'
-                      : 'bg-indigo-50 text-indigo-600'
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${selectedTag === tag
+                ? isHinglish
+                  ? 'bg-indigo-500/10 text-indigo-600'
                   : isDark
-                    ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
-                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
-              }`}
+                    ? 'bg-indigo-500/10 text-indigo-400'
+                    : 'bg-indigo-50 text-indigo-600'
+                : isDark
+                  ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
+                  : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                }`}
               type="button"
             >
               {tag}
@@ -839,9 +829,8 @@ export function NotesVault({
       {/* New Note Form */}
       {showForm && (
         <div
-          className={`${card} rounded-2xl p-5 animate-slide-up border ${
-            isHinglish ? 'border-indigo-300/30' : isDark ? 'border-indigo-500/15' : 'border-indigo-200/40'
-          }`}
+          className={`${card} rounded-2xl p-5 animate-slide-up border ${darkLike ? 'border-indigo-500/15' : 'border-indigo-200/40'
+            }`}
         >
           <h3 className={`text-sm font-semibold ${tp} mb-3`}>{t('inscribeScroll', lang)}</h3>
           <div className="space-y-3">
@@ -853,15 +842,14 @@ export function NotesVault({
                     <button
                       key={e}
                       onClick={() => setNewEmoji(e)}
-                      className={`w-7 h-7 rounded-md text-sm flex items-center justify-center transition-all ${
-                        newEmoji === e
-                          ? isDark
-                            ? 'bg-indigo-500/15 ring-1 ring-indigo-400 scale-110'
-                            : 'bg-indigo-50 ring-1 ring-indigo-300 scale-110'
-                          : isDark
-                            ? 'hover:bg-white/[0.04]'
-                            : 'hover:bg-slate-50'
-                      }`}
+                      className={`w-7 h-7 rounded-md text-sm flex items-center justify-center transition-all ${newEmoji === e
+                        ? isDark
+                          ? 'bg-indigo-500/15 ring-1 ring-indigo-400 scale-110'
+                          : 'bg-indigo-50 ring-1 ring-indigo-300 scale-110'
+                        : isDark
+                          ? 'hover:bg-white/[0.04]'
+                          : 'hover:bg-slate-50'
+                        }`}
                       type="button"
                     >
                       {e}
@@ -876,9 +864,8 @@ export function NotesVault({
                     <button
                       key={c}
                       onClick={() => setNewColor(c)}
-                      className={`w-7 h-7 rounded-md transition-all ${newColor === c ? 'ring-2 ring-offset-1 scale-110' : 'hover:scale-105'} ${
-                        isDark ? 'ring-indigo-400 ring-offset-[#16162A]' : 'ring-indigo-400 ring-offset-white'
-                      }`}
+                      className={`w-7 h-7 rounded-md transition-all ${newColor === c ? 'ring-2 ring-offset-1 scale-110' : 'hover:scale-105'} ${isDark ? 'ring-indigo-400 ring-offset-[#16162A]' : 'ring-indigo-400 ring-offset-white'
+                        }`}
                       style={{ backgroundColor: c }}
                       type="button"
                     />
@@ -945,15 +932,14 @@ export function NotesVault({
               key={note.id}
               id={`note-${note.id}`}
               onClick={() => setPreviewNote(note)}
-              className={`${card} rounded-2xl p-4 cursor-pointer group hover:-translate-y-0.5 hover:shadow-md transition-all duration-300 relative overflow-hidden ${
-                isFocused
-                  ? isHinglish
-                    ? 'ring-2 ring-indigo-400/40'
-                    : isDark
-                      ? 'ring-2 ring-indigo-400/30'
-                      : 'ring-2 ring-indigo-400/30'
-                  : ''
-              }`}
+              className={`kq-card kq-card-hover rounded-2xl p-4 cursor-pointer group transition-all duration-300 relative overflow-hidden ${isFocused
+                ? isHinglish
+                  ? 'ring-2 ring-indigo-400/40'
+                  : isDark
+                    ? 'ring-2 ring-indigo-400/30'
+                    : 'ring-2 ring-indigo-400/30'
+                : ''
+                }`}
               style={{ animationDelay: `${index * 60}ms` }}
             >
               <div className="absolute top-0 left-0 w-full h-[2px]" style={{ backgroundColor: note.color }} />
@@ -1003,9 +989,8 @@ export function NotesVault({
           onClick={() => setPreviewNote(null)}
         >
           <div
-            className={`rounded-2xl shadow-2xl max-w-lg w-full p-7 animate-slide-up relative ${
-              isDark ? 'bg-[#16162A] border border-white/[0.06]' : 'bg-white'
-            }`}
+            className={`rounded-2xl shadow-2xl max-w-lg w-full p-7 animate-slide-up relative ${isDark ? 'bg-[#16162A] border border-white/[0.06]' : 'bg-white'
+              }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="absolute top-0 left-0 w-full h-[3px] rounded-t-2xl" style={{ backgroundColor: previewNote.color }} />
@@ -1044,24 +1029,21 @@ export function NotesVault({
 
               {showExportMenu && !editMode && (
                 <div
-                  className={`absolute right-0 top-10 w-44 rounded-xl shadow-xl border overflow-hidden ${
-                    isDark ? 'bg-[#111124] border-white/[0.08]' : 'bg-white border-slate-200'
-                  }`}
+                  className={`absolute right-0 top-10 w-44 rounded-xl shadow-xl border overflow-hidden ${isDark ? 'bg-[#111124] border-white/[0.08]' : 'bg-white border-slate-200'
+                    }`}
                 >
                   <button
                     onClick={() => doExport('md')}
-                    className={`w-full px-3 py-2 text-left text-[12px] flex items-center gap-2 ${
-                      isDark ? 'hover:bg-white/[0.04] text-slate-200' : 'hover:bg-slate-50 text-slate-700'
-                    }`}
+                    className={`w-full px-3 py-2 text-left text-[12px] flex items-center gap-2 ${isDark ? 'hover:bg-white/[0.04] text-slate-200' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
                     type="button"
                   >
                     <FileText size={14} /> Export .md
                   </button>
                   <button
                     onClick={() => doExport('txt')}
-                    className={`w-full px-3 py-2 text-left text-[12px] flex items-center gap-2 ${
-                      isDark ? 'hover:bg-white/[0.04] text-slate-200' : 'hover:bg-slate-50 text-slate-700'
-                    }`}
+                    className={`w-full px-3 py-2 text-left text-[12px] flex items-center gap-2 ${isDark ? 'hover:bg-white/[0.04] text-slate-200' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
                     type="button"
                   >
                     <FileText size={14} /> Export .txt
@@ -1094,15 +1076,14 @@ export function NotesVault({
                         <button
                           key={e}
                           onClick={() => setEditEmoji(e)}
-                          className={`w-7 h-7 rounded-md text-sm flex items-center justify-center transition-all ${
-                            editEmoji === e
-                              ? isDark
-                                ? 'bg-indigo-500/15 ring-1 ring-indigo-400 scale-110'
-                                : 'bg-indigo-50 ring-1 ring-indigo-300 scale-110'
-                              : isDark
-                                ? 'hover:bg-white/[0.04]'
-                                : 'hover:bg-slate-50'
-                          }`}
+                          className={`w-7 h-7 rounded-md text-sm flex items-center justify-center transition-all ${editEmoji === e
+                            ? isDark
+                              ? 'bg-indigo-500/15 ring-1 ring-indigo-400 scale-110'
+                              : 'bg-indigo-50 ring-1 ring-indigo-300 scale-110'
+                            : isDark
+                              ? 'hover:bg-white/[0.04]'
+                              : 'hover:bg-slate-50'
+                            }`}
                           type="button"
                         >
                           {e}
@@ -1117,9 +1098,8 @@ export function NotesVault({
                         <button
                           key={c}
                           onClick={() => setEditColor(c)}
-                          className={`w-7 h-7 rounded-md transition-all ${editColor === c ? 'ring-2 ring-offset-1 scale-110' : 'hover:scale-105'} ${
-                            isDark ? 'ring-indigo-400 ring-offset-[#16162A]' : 'ring-indigo-400 ring-offset-white'
-                          }`}
+                          className={`w-7 h-7 rounded-md transition-all ${editColor === c ? 'ring-2 ring-offset-1 scale-110' : 'hover:scale-105'} ${isDark ? 'ring-indigo-400 ring-offset-[#16162A]' : 'ring-indigo-400 ring-offset-white'
+                            }`}
                           style={{ backgroundColor: c }}
                           type="button"
                         />
@@ -1213,13 +1193,12 @@ export function NotesVault({
                         setRevPage(1);
                         setShowHistory((v) => !v);
                       }}
-                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
-                        isHinglish
-                          ? 'bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/15'
-                          : isDark
-                            ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200/60'
-                      }`}
+                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${isHinglish
+                        ? 'bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/15'
+                        : isDark
+                          ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200/60'
+                        }`}
                     >
                       <Clock size={14} /> History
                       <span className={`text-[11px] ${ts}`}>({previewNote.revisions.length})</span>
@@ -1228,40 +1207,38 @@ export function NotesVault({
                     {showHistory && (
                       <>
                         <div className="mt-3 space-y-2 max-h-72 overflow-auto pr-1">
-                        {revisionsPager.items.map((rev, idx) => (
-                          <div
-                            key={`${rev.editedAt}-${idx}`}
-                            className={`rounded-xl p-3 border ${
-                              isHinglish
+                          {revisionsPager.items.map((rev, idx) => (
+                            <div
+                              key={`${rev.editedAt}-${idx}`}
+                              className={`rounded-xl p-3 border ${isHinglish
                                 ? 'bg-white/60 border-indigo-200/30'
                                 : isDark
                                   ? 'bg-white/[0.03] border-white/[0.06]'
                                   : 'bg-slate-50/80 border-slate-200/50'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className={`text-[12px] font-semibold ${tp} truncate`}>{rev.title || '(untitled)'}</div>
-                                <div className={`text-[11px] ${ts}`}>Edited {prettyRelative(rev.editedAt)}</div>
-                                <div className={`text-[11px] mt-1 line-clamp-2 ${ts}`}>{rev.content}</div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!revisionMatchesCurrent(rev, previewNote)) restoreRevision(rev);
-                                }}
-                                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
-                                  isDark ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]' : 'bg-white text-slate-700 hover:bg-slate-50'
                                 }`}
-                                disabled={revisionMatchesCurrent(rev, previewNote)}
-                                title={revisionMatchesCurrent(rev, previewNote) ? "Already current" : "Load this version"}
-                              >
-                                <RotateCcw size={14} /> Restore
-                              </button>
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className={`text-[12px] font-semibold ${tp} truncate`}>{rev.title || '(untitled)'}</div>
+                                  <div className={`text-[11px] ${ts}`}>Edited {prettyRelative(rev.editedAt)}</div>
+                                  <div className={`text-[11px] mt-1 line-clamp-2 ${ts}`}>{rev.content}</div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!revisionMatchesCurrent(rev, previewNote)) restoreRevision(rev);
+                                  }}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${isDark ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]' : 'bg-white text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                  disabled={revisionMatchesCurrent(rev, previewNote)}
+                                  title={revisionMatchesCurrent(rev, previewNote) ? "Already current" : "Load this version"}
+                                >
+                                  <RotateCcw size={14} /> Restore
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
                         {revisionsPager.totalPages > 1 && (
                           <div className="mt-2 flex items-center justify-between">
                             <button
@@ -1292,13 +1269,12 @@ export function NotesVault({
 
             {/* Attachments */}
             <div
-              className={`rounded-xl p-3 mb-4 ${
-                isHinglish
-                  ? 'bg-white/60 border border-indigo-200/30'
-                  : isDark
-                    ? 'bg-white/[0.03] border border-white/[0.06]'
-                    : 'bg-slate-50/80 border border-slate-200/50'
-              }`}
+              className={`rounded-xl p-3 mb-4 ${isHinglish
+                ? 'bg-white/60 border border-indigo-200/30'
+                : isDark
+                  ? 'bg-white/[0.03] border border-white/[0.06]'
+                  : 'bg-slate-50/80 border border-slate-200/50'
+                }`}
             >
               <div className="flex items-center justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2">
@@ -1308,17 +1284,16 @@ export function NotesVault({
                 </div>
 
                 <label
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] cursor-pointer transition-all ${
-                    !attachments.canUse
-                      ? isDark
-                        ? 'bg-white/[0.03] text-slate-500'
-                        : 'bg-slate-100 text-slate-400'
-                      : isHinglish
-                        ? 'bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/15'
-                        : isDark
-                          ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]'
-                          : 'bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] cursor-pointer transition-all ${!attachments.canUse
+                    ? isDark
+                      ? 'bg-white/[0.03] text-slate-500'
+                      : 'bg-slate-100 text-slate-400'
+                    : isHinglish
+                      ? 'bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/15'
+                      : isDark
+                        ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]'
+                        : 'bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
                 >
                   <Upload size={14} />
                   {attachments.loading ? (isHinglish ? 'Uploading…' : 'Uploading…') : isHinglish ? 'Upload' : 'Upload'}
@@ -1373,9 +1348,8 @@ export function NotesVault({
                   {attachments.rows.map((a) => (
                     <div
                       key={a.id}
-                      className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 ${
-                        isHinglish ? 'bg-white/60' : isDark ? 'bg-white/[0.03]' : 'bg-white'
-                      }`}
+                      className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 ${darkLike ? 'bg-white/[0.03]' : 'bg-white'
+                        }`}
                     >
                       <div className="min-w-0">
                         <p className={`text-[12px] font-medium truncate ${tp}`}>{a.file_name}</p>

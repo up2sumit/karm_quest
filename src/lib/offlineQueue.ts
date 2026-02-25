@@ -166,14 +166,28 @@ async function flushOne(client: SupabaseClient, op: OfflineOp) {
   }
 
   if (op.kind === 'notes_full_sync') {
-    // Safe + schema-tolerant strategy: delete then insert.
-    // (Avoids UPSERT failures when an older notes table lacks unique constraints.)
-    const del = await client.from('notes').delete().eq('user_id', op.user_id);
-    if (del.error) throw del.error;
-
+    // Safe strategy: upsert in batches, then reconcile deletes.
+    // This prevents data loss if a sync is interrupted mid-operation.
     for (const batch of chunk(op.notes, 200)) {
-      const ins = await client.from('notes').insert(batch);
-      if (ins.error) throw ins.error;
+      const { error } = await client.from('notes').upsert(batch, { onConflict: 'user_id,note_id' });
+      if (error) throw error;
+    }
+
+    // Reconcile deletes: remove server rows that no longer exist locally
+    const { data: existing, error: selErr } = await client
+      .from('notes')
+      .select('note_id')
+      .eq('user_id', op.user_id)
+      .limit(5000);
+    if (selErr) throw selErr;
+
+    const existingIds = new Set(((existing as { note_id: string }[] | null) ?? []).map((r) => String(r.note_id)));
+    const currentIds = new Set(op.notes.map((n: any) => String(n.note_id)));
+    const toDelete = [...existingIds].filter((id) => !currentIds.has(id));
+
+    for (const delBatch of chunk(toDelete, 200)) {
+      const { error } = await client.from('notes').delete().eq('user_id', op.user_id).in('note_id', delBatch);
+      if (error) throw error;
     }
     return;
   }

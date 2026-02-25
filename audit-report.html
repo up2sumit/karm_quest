@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KarmQuest — Codebase Audit Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090f;--bg2:#111119;--surface:rgba(255,255,255,.04);
+  --border:rgba(255,255,255,.07);--border2:rgba(139,92,246,.25);
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --accent:#8b5cf6;--accent2:#6366f1;--accent3:#a78bfa;
+  --red:#ef4444;--orange:#f59e0b;--green:#22c55e;--cyan:#06b6d4;
+  --gradient:linear-gradient(135deg,#8b5cf6,#6366f1,#3b82f6);
+  --glow:0 0 60px rgba(139,92,246,.15);
+}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+
+/* Animated background */
+.bg-grid{position:fixed;inset:0;z-index:0;opacity:.03;
+  background-image:linear-gradient(rgba(255,255,255,.1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.1) 1px,transparent 1px);
+  background-size:60px 60px}
+.bg-orb{position:fixed;border-radius:50%;filter:blur(120px);opacity:.12;z-index:0;animation:float 20s ease-in-out infinite}
+.bg-orb.o1{width:500px;height:500px;background:#8b5cf6;top:-10%;left:-10%;animation-delay:0s}
+.bg-orb.o2{width:400px;height:400px;background:#3b82f6;bottom:-10%;right:-10%;animation-delay:-7s}
+.bg-orb.o3{width:300px;height:300px;background:#06b6d4;top:50%;left:50%;animation-delay:-14s}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(30px,-40px) scale(1.05)}66%{transform:translate(-20px,30px) scale(.95)}}
+
+.container{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:20px}
+
+/* Hero */
+.hero{text-align:center;padding:80px 20px 60px;position:relative}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:99px;
+  background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.25);color:var(--accent3);
+  font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:20px}
+.hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.hero h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:900;
+  background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;line-height:1.1;margin-bottom:16px}
+.hero p{color:var(--text2);font-size:clamp(1rem,2vw,1.25rem);max-width:700px;margin:0 auto}
+
+/* Stats ribbon */
+.stats-ribbon{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin:40px 0 60px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;text-align:center;
+  transition:all .3s;cursor:default}
+.stat-card:hover{border-color:var(--border2);transform:translateY(-4px);box-shadow:var(--glow)}
+.stat-num{font-size:2.5rem;font-weight:800;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.stat-label{color:var(--text3);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+
+/* Section */
+.section{margin-bottom:60px}
+.section-header{display:flex;align-items:center;gap:14px;margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.section-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.section-icon.bug{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.2)}
+.section-icon.missing{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.2)}
+.section-icon.improve{background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.2)}
+.section-icon.new{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.2)}
+.section-icon.roadmap{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.2)}
+.section-title{font-size:1.5rem;font-weight:800}
+.section-count{font-size:13px;color:var(--text3);font-weight:500}
+
+/* Tabs */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:24px}
+.tab{padding:8px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);
+  font-size:13px;font-weight:600;cursor:pointer;transition:all .25s}
+.tab:hover{border-color:var(--border2);color:var(--text)}
+.tab.active{background:var(--gradient);color:#fff;border-color:transparent}
+
+/* Cards */
+.card-grid{display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;
+  transition:all .3s;opacity:0;transform:translateY(20px);animation:fadeUp .5s forwards}
+.card:hover{border-color:var(--border2);box-shadow:var(--glow)}
+@keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.card-id{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;flex-shrink:0}
+.card-id.high{background:rgba(239,68,68,.15);color:#f87171}
+.card-id.medium{background:rgba(245,158,11,.15);color:#fbbf24}
+.card-id.low{background:rgba(34,197,94,.15);color:#4ade80}
+.card-title{font-size:15px;font-weight:700;flex:1}
+.card-desc{color:var(--text2);font-size:13px;line-height:1.6}
+.card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.badge{font-size:11px;padding:3px 10px;border-radius:6px;font-weight:600}
+.badge-red{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.15)}
+.badge-orange{background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.15)}
+.badge-green{background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.15)}
+.badge-blue{background:rgba(59,130,246,.1);color:#60a5fa;border:1px solid rgba(59,130,246,.15)}
+.badge-purple{background:rgba(139,92,246,.1);color:var(--accent3);border:1px solid rgba(139,92,246,.15)}
+
+/* Roadmap timeline */
+.timeline{position:relative;padding-left:32px}
+.timeline::before{content:'';position:absolute;left:11px;top:0;bottom:0;width:2px;
+  background:linear-gradient(to bottom,var(--accent),var(--green))}
+.timeline-item{position:relative;margin-bottom:32px;animation:fadeUp .5s forwards;opacity:0}
+.timeline-dot{position:absolute;left:-32px;top:4px;width:22px;height:22px;border-radius:50%;
+  border:3px solid var(--bg);display:flex;align-items:center;justify-content:center;font-size:10px}
+.timeline-dot.p1{background:var(--red)}
+.timeline-dot.p2{background:var(--orange)}
+.timeline-dot.p3{background:var(--cyan)}
+.timeline-dot.p4{background:var(--green)}
+.timeline-phase{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.timeline-phase.p1{color:#f87171}.timeline-phase.p2{color:#fbbf24}.timeline-phase.p3{color:#22d3ee}.timeline-phase.p4{color:#4ade80}
+.timeline-title{font-size:18px;font-weight:800;margin-bottom:8px}
+.timeline-items{list-style:none;display:flex;flex-direction:column;gap:6px}
+.timeline-items li{color:var(--text2);font-size:13px;padding-left:18px;position:relative}
+.timeline-items li::before{content:'→';position:absolute;left:0;color:var(--accent3)}
+
+/* Nav */
+.side-nav{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:50;display:flex;flex-direction:column;gap:6px}
+.side-nav a{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.15);transition:all .3s;display:block}
+.side-nav a:hover,.side-nav a.active{background:var(--accent);transform:scale(1.4);box-shadow:0 0 12px rgba(139,92,246,.5)}
+
+/* Scroll to top */
+.scroll-top{position:fixed;bottom:30px;right:30px;width:44px;height:44px;border-radius:12px;
+  background:var(--gradient);color:#fff;border:none;cursor:pointer;font-size:18px;z-index:50;
+  opacity:0;transform:translateY(20px);transition:all .3s;display:flex;align-items:center;justify-content:center}
+.scroll-top.show{opacity:1;transform:translateY(0)}
+.scroll-top:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(139,92,246,.4)}
+
+@media(max-width:768px){
+  .side-nav{display:none}
+  .hero{padding:50px 16px 40px}
+  .container{padding:16px}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-orb o1"></div>
+<div class="bg-orb o2"></div>
+<div class="bg-orb o3"></div>
+
+<nav class="side-nav" id="sideNav">
+  <a href="#hero" title="Top"></a>
+  <a href="#bugs" title="Bugs"></a>
+  <a href="#missing" title="Missing"></a>
+  <a href="#improve" title="Improve"></a>
+  <a href="#new" title="New"></a>
+  <a href="#roadmap" title="Roadmap"></a>
+</nav>
+
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0})">↑</button>
+
+<div class="container">
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="hero-badge"><span class="dot"></span> Live Audit Report</div>
+  <h1>KarmQuest Codebase Audit</h1>
+  <p>Thorough analysis of ~70 source files covering bugs, missing features, improvements, and new feature opportunities.</p>
+</section>
+
+<!-- STATS -->
+<div class="stats-ribbon">
+  <div class="stat-card"><div class="stat-num" data-count="14">0</div><div class="stat-label">Bugs Found</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="20">0</div><div class="stat-label">Missing Features</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="15">0</div><div class="stat-label">Improvements</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="20">0</div><div class="stat-label">New Ideas</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="70">0</div><div class="stat-label">Files Analysed</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="2583">0</div><div class="stat-label">Lines in App.tsx</div></div>
+</div>
+
+<!-- BUGS -->
+<section class="section" id="bugs">
+  <div class="section-header">
+    <div class="section-icon bug">🐛</div>
+    <div><div class="section-title">Bugs & Critical Issues</div><div class="section-count">14 issues identified</div></div>
+  </div>
+  <div class="tabs" data-section="bugs">
+    <button class="tab active" data-filter="all">All (14)</button>
+    <button class="tab" data-filter="high">🔴 High (3)</button>
+    <button class="tab" data-filter="medium">🟡 Medium (7)</button>
+    <button class="tab" data-filter="low">🟢 Low (4)</button>
+  </div>
+  <div class="card-grid" id="bugsGrid"></div>
+</section>
+
+<!-- MISSING -->
+<section class="section" id="missing">
+  <div class="section-header">
+    <div class="section-icon missing">🚫</div>
+    <div><div class="section-title">Missing Features vs Competitors</div><div class="section-count">20 gaps identified</div></div>
+  </div>
+  <div class="tabs" data-section="missing">
+    <button class="tab active" data-filter="all">All (20)</button>
+    <button class="tab" data-filter="high">🔴 High (2)</button>
+    <button class="tab" data-filter="medium">🟡 Medium (12)</button>
+    <button class="tab" data-filter="low">🟢 Low (6)</button>
+  </div>
+  <div class="card-grid" id="missingGrid"></div>
+</section>
+
+<!-- IMPROVE -->
+<section class="section" id="improve">
+  <div class="section-header">
+    <div class="section-icon improve">🔧</div>
+    <div><div class="section-title">Features to Improve</div><div class="section-count">15 suggestions</div></div>
+  </div>
+  <div class="card-grid" id="improveGrid"></div>
+</section>
+
+<!-- NEW -->
+<section class="section" id="new">
+  <div class="section-header">
+    <div class="section-icon new">✨</div>
+    <div><div class="section-title">New Feature Suggestions</div><div class="section-count">20 ideas</div></div>
+  </div>
+  <div class="tabs" data-section="new">
+    <button class="tab active" data-filter="all">All (20)</button>
+    <button class="tab" data-filter="high">🔴 High (4)</button>
+    <button class="tab" data-filter="medium">🟡 Medium (9)</button>
+    <button class="tab" data-filter="low">🟢 Low (7)</button>
+  </div>
+  <div class="card-grid" id="newGrid"></div>
+</section>
+
+<!-- ROADMAP -->
+<section class="section" id="roadmap">
+  <div class="section-header">
+    <div class="section-icon roadmap">🗺️</div>
+    <div><div class="section-title">Priority Roadmap</div><div class="section-count">4-phase plan</div></div>
+  </div>
+  <div class="timeline" id="timeline">
+    <div class="timeline-item" style="animation-delay:.1s"><div class="timeline-dot p1"></div><div class="timeline-phase p1">Phase 1 — 1-2 Weeks</div><div class="timeline-title">Bug Fixes & Stability</div><ul class="timeline-items"><li>Refactor App.tsx into modular components</li><li>Add React Router with URL navigation</li><li>Fix quest ID collisions → crypto.randomUUID()</li><li>Debounce persistence writes (300ms)</li><li>Extract XP/level calc into shared utility</li><li>Fix notes sync (upsert vs delete+insert)</li><li>Add React error boundary</li></ul></div>
+    <div class="timeline-item" style="animation-delay:.3s"><div class="timeline-dot p2"></div><div class="timeline-phase p2">Phase 2 — 2-3 Weeks</div><div class="timeline-title">Core UX Improvements</div><ul class="timeline-items"><li>Drag & drop quest reordering</li><li>PWA support (manifest, service worker)</li><li>Undo for quest completion/deletion</li><li>Performance optimization & code splitting</li><li>Accessibility audit (ARIA, keyboard nav)</li><li>Gamified onboarding tutorial</li><li>Enhanced Focus Timer (custom durations)</li></ul></div>
+    <div class="timeline-item" style="animation-delay:.5s"><div class="timeline-dot p3"></div><div class="timeline-phase p3">Phase 3 — 3-4 Weeks</div><div class="timeline-title">Feature Expansion</div><ul class="timeline-items"><li>Habit Tracker mode (separate from quests)</li><li>Streak Freeze shop item</li><li>Custom recurring schedules</li><li>Quest description field</li><li>Archive vs delete</li><li>Extended heatmap (90/365 days)</li><li>Focus statistics dashboard</li></ul></div>
+    <div class="timeline-item" style="animation-delay:.7s"><div class="timeline-dot p4"></div><div class="timeline-phase p4">Phase 4 — 4+ Weeks</div><div class="timeline-title">Social & Advanced</div><ul class="timeline-items"><li>AI-powered daily planner</li><li>Social features (friends, reactions)</li><li>Shared / collaborative quests</li><li>Push notifications</li><li>Analytics dashboard</li><li>Global leaderboard tiers</li><li>Real-time multi-device sync</li></ul></div>
+  </div>
+</section>
+
+<footer style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px;border-top:1px solid var(--border)">
+  KarmQuest Codebase Audit · Generated 2026-02-26 · ~70 files · ~400 KB analysed
+</footer>
+</div>
+
+<script>
+// DATA
+const bugs=[
+{id:'B1',sev:'high',title:'Monolithic App.tsx (2,583 lines)',desc:'All state, logic, and handlers live in one function. Every state update re-evaluates the entire tree, hurting performance and maintainability.'},
+{id:'B2',sev:'high',title:'No React Router',desc:'Navigation uses state + switch. URL never updates, no browser back/forward, no deep-linking. Users lose their place on refresh.'},
+{id:'B3',sev:'medium',title:'Quest ID Collisions',desc:'IDs use Date.now().toString() — adding quests quickly or via templates can create duplicates. Should use crypto.randomUUID().'},
+{id:'B4',sev:'medium',title:'Persistence Writes Every State Change',desc:'93KB+ snapshots written to localStorage on every update. Causes jank on low-end devices. Needs debouncing.'},
+{id:'B5',sev:'medium',title:'Duplicated XP / Level-up Logic',desc:'Identical while-loop level calc in handleCompleteQuest and awardFocusBonus. Formula changes must sync in two places.'},
+{id:'B6',sev:'medium',title:'Streak Logic Not Timezone-Aware',desc:'Only checks yesterday/today via local midnight. Edge cases around midnight and DST transitions can break streaks.'},
+{id:'B7',sev:'low',title:'Stale Dependency Arrays',desc:'handleBuyItem and handleClaimChallenge list lang/isHinglish in deps but never use them, causing unnecessary re-renders.'},
+{id:'B8',sev:'medium',title:'Export Missing challengeState & weeklyReports',desc:'Importing a backup loses challenge progress and weekly report history.'},
+{id:'B9',sev:'high',title:'Destructive Notes Sync',desc:'Notes sync deletes ALL rows then re-inserts. A brief outage mid-sync can leave the notes table empty. Must use upsert.'},
+{id:'B10',sev:'medium',title:'No Error Boundary',desc:'A runtime error in any component crashes the entire app with a white screen. No graceful fallback.'},
+{id:'B11',sev:'low',title:'Guest Mode Inconsistency',desc:'Guests start with 6 demo notes but all achievements locked. Pre-loaded notes don\'t count toward "created" achievements.'},
+{id:'B12',sev:'low',title:'Theme Naming Confusion',desc:'isDark maps to "hinglish" theme. The "dark" theme is actually a light palette. Confusing for contributors.'},
+{id:'B13',sev:'medium',title:'completedAt Date Comparison Bug',desc:'Daily resets compare completedAt via exact string equality. If stored as full ISO timestamp (from cloud), comparison always fails.'},
+{id:'B14',sev:'low',title:'Missing Zustand (Docs Mismatch)',desc:'Architecture docs mention "Zustand Store" but there\'s no Zustand dependency. State is pure useState.'},
+];
+
+const missing=[
+{id:'M1',sev:'high',title:'Drag & Drop Quest Reordering',ref:'Todoist, TickTick'},
+{id:'M2',sev:'medium',title:'Priority Levels (Urgency vs Effort)',ref:'Todoist, TickTick'},
+{id:'M3',sev:'medium',title:'Due Time + Time-Based Reminders',ref:'Todoist, Google Calendar'},
+{id:'M4',sev:'medium',title:'Projects / Folder Grouping',ref:'Todoist, Notion'},
+{id:'M5',sev:'medium',title:'Tags / Labels on Quests',ref:'Todoist, TickTick'},
+{id:'M6',sev:'low',title:'Natural Language Date Input',ref:'Todoist'},
+{id:'M7',sev:'medium',title:'Kanban Board View',ref:'Notion, TickTick'},
+{id:'M8',sev:'medium',title:'Full Calendar View',ref:'TickTick, Google Calendar'},
+{id:'M9',sev:'medium',title:'Collaboration / Shared Quests',ref:'Habitica (Guilds)'},
+{id:'M10',sev:'medium',title:'Recurring on Custom Days',ref:'Todoist, TickTick'},
+{id:'M11',sev:'high',title:'Mobile PWA Support',ref:'All competitors'},
+{id:'M12',sev:'medium',title:'Undo Action',ref:'Todoist'},
+{id:'M13',sev:'low',title:'Rich Text / WYSIWYG Editor',ref:'Notion'},
+{id:'M14',sev:'low',title:'Full-Text Search in Notes',ref:'Notion, Bear'},
+{id:'M15',sev:'low',title:'Activity Log / Timeline View',ref:'Habitica'},
+{id:'M16',sev:'medium',title:'Notification Preferences',ref:'All competitors'},
+{id:'M17',sev:'low',title:'Multi-Language Support (25+)',ref:'Todoist'},
+{id:'M18',sev:'low',title:'Keyboard Shortcuts',ref:'Todoist, Notion'},
+{id:'M19',sev:'medium',title:'Bulk Actions on Quests',ref:'Todoist'},
+{id:'M20',sev:'medium',title:'Task Description / Notes Field',ref:'Todoist, TickTick'},
+];
+
+const improve=[
+{id:'I1',title:'Heatmap: Extend to 90/365 Days',desc:'Current 30-day view is too short. Add scrollable GitHub-style contribution graph.'},
+{id:'I2',title:'Focus Timer: Custom Durations & History',desc:'Add presets (Deep Work 90m, Quick 10m), ambient sounds, and session history log.'},
+{id:'I3',title:'Notes: Live Preview & Split-Pane',desc:'Add side-by-side edit/preview, markdown toolbar, Ctrl+B/I shortcuts, image embeds.'},
+{id:'I4',title:'Mood: Multiple Daily Check-ins',desc:'Allow timestamped entries, optional journal field, correlation with productivity trends.'},
+{id:'I5',title:'Weekly Report: On-Demand & Comparison',desc:'Generate for any range, add week-over-week comparison, PDF/image export.'},
+{id:'I6',title:'Achievements: Dynamic & Community',desc:'Expand beyond 12 hardcoded achievements. Add custom milestones and rarity percentages.'},
+{id:'I7',title:'Shop: More Boost Types',desc:'Streak freeze, deadline extension, consumable items, seasonal limited-time items.'},
+{id:'I8',title:'Auth: More Providers + 2FA',desc:'Add GitHub, Apple sign-in, magic link authentication, and two-factor auth.'},
+{id:'I9',title:'Mobile: Bottom Navigation Bar',desc:'Theme-aware mobile bottom nav (like native apps) instead of hamburger sidebar.'},
+{id:'I10',title:'Categories: Management UI',desc:'Create/edit/delete categories with custom colors and icons instead of free-text strings.'},
+{id:'I11',title:'Templates: Gallery & Community',desc:'Feature template gallery with recommendations and one-click start instead of buried in Profile.'},
+{id:'I12',title:'Leaderboard: Global Tiers',desc:'Add global rankings, anonymized tiers, and challenge lobbies beyond friends-only.'},
+{id:'I13',title:'Cloud Sync: Conflict Resolution',desc:'Add merge strategy with conflict detection UI instead of last-write-wins.'},
+{id:'I14',title:'Performance: Memoization & Code Splitting',desc:'Break monolith into memoized sub-trees. Use React.lazy for route-based splitting.'},
+{id:'I15',title:'Accessibility: WCAG 2.1 AA',desc:'Add ARIA labels, focus management, skip-to-content, screen reader support throughout.'},
+];
+
+const newFeatures=[
+{id:'N1',sev:'high',title:'Habit Tracker Mode',desc:'Separate habits from one-off quests with per-habit streaks, yes/no toggle, and individual heatmaps.'},
+{id:'N2',sev:'high',title:'Smart Daily Planner (AI)',desc:'Auto-prioritize quests by due date, difficulty, and streak risk. "Today\'s Plan" card on dashboard.'},
+{id:'N3',sev:'medium',title:'Pomodoro Statistics Dashboard',desc:'Focus hours, average session length, best focus day, focus-by-category breakdown with charts.'},
+{id:'N4',sev:'medium',title:'Social Features',desc:'Friend system, profile sharing, challenge friends, send encouragement, react to achievements.'},
+{id:'N5',sev:'medium',title:'Push Notifications',desc:'Browser push for reminders, streak warnings, daily challenge alerts (requires service worker).'},
+{id:'N6',sev:'medium',title:'Streak Freeze (Shop Item)',desc:'Purchasable item that preserves streak for 1 missed day. Huge motivation tool.'},
+{id:'N7',sev:'low',title:'Priority Matrix (Eisenhower)',desc:'Four-quadrant view: Urgent+Important, Important+Not Urgent, etc.'},
+{id:'N8',sev:'medium',title:'Custom Recurring Schedule',desc:'"Every Mon/Wed/Fri", "Every 3 days", first/last of month, etc.'},
+{id:'N9',sev:'low',title:'Dark Mode for Each Theme',desc:'Each of the 4 themes should have both light and dark variants.'},
+{id:'N10',sev:'low',title:'Widget / Embed Mode',desc:'Compact widget for embedding in Notion, personal dashboards, or browser new-tab pages.'},
+{id:'N11',sev:'medium',title:'Data Visualization Dashboard',desc:'Trends: completion rate/time, XP velocity, category pie chart, productivity by day-of-week.'},
+{id:'N12',sev:'high',title:'Gamified Onboarding',desc:'Tutorial quest chain guiding new users through all features with rewards along the way.'},
+{id:'N13',sev:'low',title:'Note Templates',desc:'Pre-built: Meeting notes, Daily journal, Project plan, Book notes, etc.'},
+{id:'N14',sev:'low',title:'Quest Dependencies',desc:'"Complete A before B starts" — unlock chains for project planning.'},
+{id:'N15',sev:'medium',title:'Archive vs Delete',desc:'Soft-delete / archive for quests and notes, with archive view for recovery.'},
+{id:'N16',sev:'medium',title:'Daily Journal / Reflection',desc:'End-of-day prompt: "What went well? What to improve?" linked to mood and quest data.'},
+{id:'N17',sev:'high',title:'PWA + Full Offline Support',desc:'manifest.json, service worker, install prompt, full offline with background sync.'},
+{id:'N18',sev:'low',title:'Boss Fight Enhancements',desc:'Stages, HP bars, loot drops, and richer animations for the existing BossFightOverlay.'},
+{id:'N19',sev:'low',title:'API / Webhook Integration',desc:'Connect to Google Calendar, Slack, Discord for notifications and quest creation.'},
+{id:'N20',sev:'medium',title:'Real-Time Multi-Device Sync',desc:'Supabase Realtime subscription for instant cross-tab/device updates.'},
+];
+
+// RENDER HELPERS
+function sevBadge(s){const m={high:['🔴 High','card-id high'],medium:['🟡 Medium','card-id medium'],low:['🟢 Low','card-id low']};return m[s]||m.low}
+function renderCard(item,extra=''){const[label,cls]=sevBadge(item.sev||'low');
+return`<div class="card" data-sev="${item.sev||'all'}" style="animation-delay:${Math.random()*.3}s">
+<div class="card-top"><div class="card-title">${item.title}</div><div class="${cls}">${label}</div></div>
+<div class="card-desc">${item.desc||''}${extra}</div>
+<div class="card-meta"><span class="badge badge-purple">${item.id}</span>${item.ref?`<span class="badge badge-blue">${item.ref}</span>`:''}</div></div>`}
+
+function renderImproveCard(item){
+return`<div class="card" style="animation-delay:${Math.random()*.3}s">
+<div class="card-top"><div class="card-title">${item.title}</div><span class="badge badge-blue">${item.id}</span></div>
+<div class="card-desc">${item.desc}</div></div>`}
+
+// POPULATE
+document.getElementById('bugsGrid').innerHTML=bugs.map(b=>renderCard(b)).join('');
+document.getElementById('missingGrid').innerHTML=missing.map(m=>renderCard(m)).join('');
+document.getElementById('improveGrid').innerHTML=improve.map(i=>renderImproveCard(i)).join('');
+document.getElementById('newGrid').innerHTML=newFeatures.map(n=>renderCard(n)).join('');
+
+// TABS
+document.querySelectorAll('.tabs').forEach(tabBar=>{
+  tabBar.querySelectorAll('.tab').forEach(tab=>{
+    tab.onclick=()=>{
+      tabBar.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      const f=tab.dataset.filter;
+      const grid=tabBar.nextElementSibling;
+      grid.querySelectorAll('.card').forEach(c=>{
+        c.style.display=(f==='all'||c.dataset.sev===f)?'':'none';
+      });
+    };
+  });
+});
+
+// COUNTER ANIMATION
+const io=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting){
+    const el=e.target,end=+el.dataset.count;
+    let cur=0;const dur=1500,step=Math.ceil(end/60);
+    const t=setInterval(()=>{cur=Math.min(cur+step,end);el.textContent=cur.toLocaleString();if(cur>=end)clearInterval(t)},dur/60);
+    io.unobserve(el);
+  }});
+},{threshold:.5});
+document.querySelectorAll('[data-count]').forEach(el=>io.observe(el));
+
+// TIMELINE ANIMATION
+const tio=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting){e.target.style.opacity='1';e.target.style.transform='translateY(0)';tio.unobserve(e.target)}});
+},{threshold:.2});
+document.querySelectorAll('.timeline-item').forEach(el=>{el.style.opacity='0';el.style.transform='translateY(30px)';el.style.transition='all .6s ease';tio.observe(el)});
+
+// SCROLL TOP BUTTON
+const stb=document.getElementById('scrollTop');
+window.addEventListener('scroll',()=>{stb.classList.toggle('show',window.scrollY>400)});
+
+// SIDE NAV ACTIVE
+const sections=document.querySelectorAll('section[id]');
+const navLinks=document.querySelectorAll('.side-nav a');
+window.addEventListener('scroll',()=>{
+  let cur='';sections.forEach(s=>{if(window.scrollY>=s.offsetTop-200)cur=s.id});
+  navLinks.forEach(a=>{a.classList.toggle('active',a.getAttribute('href')==='#'+cur)});
+});
+</script>
+</body>
+</html>

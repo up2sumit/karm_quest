@@ -71,16 +71,18 @@ export function Dashboard({
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const activeQuests = quests.filter(q => q.status === 'active');
 
-  const card = isModern
-    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_1px_rgba(0,0,0,0.04)]'
-    : isHinglish
-      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
-      : isDark
-        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-        : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
-  const tp = isModern ? 'text-[var(--kq-text-primary)]' : isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const tm = isModern ? 'text-[var(--kq-text-muted)]' : isHinglish ? 'text-slate-400' : isDark ? 'text-slate-600' : 'text-slate-400';
+  // Token-driven styling so Theme 1 uses saffron/orange, Theme 3 uses blue/violet,
+  // Theme 4 stays deep indigo/black, and Theme 2 stays editorial.
+  const card = 'kq-card kq-card-hover backdrop-blur-xl';
+  const tp = 'text-[var(--kq-text-primary)]';
+  const ts = 'text-[var(--kq-text-secondary)]';
+  const tm = 'text-[var(--kq-text-muted)]';
+
+  // Icon accents (token-driven; keeps Theme 1 warm and Theme 4 indigo)
+  const iconA = 'text-[var(--kq-primary)]';
+  const iconB = 'text-[var(--kq-accent)]';
+  const iconC = 'text-[var(--kq-primary-light)]';
+  const iconD = 'text-[var(--kq-accent-light)]';
 
   useEffect(() => {
     const quotes = getQuotes(lang);
@@ -103,16 +105,14 @@ export function Dashboard({
 
   const bannerGradient = isModern
     ? 'bg-[#1E2322] border border-black/10'
-    : isHinglish
-      ? 'bg-gradient-to-r from-indigo-500/90 via-violet-500/90 to-indigo-500/90'
-      : isDark
-        ? 'bg-gradient-to-r from-indigo-600/90 via-violet-600/90 to-purple-700/90'
-        : 'bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-600';
+    : 'kq-gradient-135 border border-white/10';
+
+  const ringTrack = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.10)';
 
   return (
-    <div className="space-y-5 animate-slide-up">
+    <div className="space-y-6 sm:space-y-7 animate-slide-up">
       {/* Welcome Banner */}
-      <div className={`relative overflow-hidden rounded-2xl p-7 text-white shadow-lg ${bannerGradient}`}>
+      <div className={`relative overflow-hidden rounded-3xl p-7 sm:p-8 text-white shadow-[var(--kq-shadow-card)] ${bannerGradient}`}>
         {!isModern && (
           <div className="absolute inset-0 opacity-[0.07]">
             {bannerCircles.map(c => (
@@ -129,11 +129,11 @@ export function Dashboard({
             <p className="text-sm font-medium mb-1 text-white/60">
               {isHinglish ? '🤙' : isModern ? '👋' : '🙏'} {t('welcomeGreeting', lang)}, {stats.username}!
             </p>
-            <h2 className="text-2xl font-bold mb-1.5">{t('welcomeTitle', lang)}</h2>
+            <h2 className="text-3xl sm:text-[32px] font-black mb-1.5 kq-h2">{t('welcomeTitle', lang)}</h2>
             <p className="text-[13px] max-w-md text-white/50">{quote}</p>
             <button
               onClick={() => onNavigate('quests')}
-              className={`mt-4 px-5 py-2 rounded-xl text-[13px] font-semibold transition-all flex items-center gap-2 group ${
+              className={`mt-4 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-all flex items-center gap-2 group ${
                 isModern
                   ? 'bg-[var(--kq-primary)] hover:bg-[var(--kq-primary-light)] border border-white/10'
                   : 'bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/10 hover:border-white/20'
@@ -147,18 +147,18 @@ export function Dashboard({
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {[
-          { icon: <Target className={isHinglish ? 'text-indigo-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'} size={20} />, label: t('todaysKarma', lang), value: `${completedToday}/${totalToday}`, sub: t('questsDone', lang), emoji: '🎯', onClick: () => (onNavigateTodaysKarma ? onNavigateTodaysKarma() : onNavigate('quests')) },
-          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${stats.totalXpEarned ?? stats.xp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨', onClick: () => onNavigate('achievements') },
-          { icon: <Zap className={isHinglish ? 'text-amber-400' : isDark ? 'text-amber-400' : 'text-amber-500'} size={20} />, label: t('goldMudras', lang), value: `${stats.coins}`, sub: t('keepGrinding', lang), emoji: '🪙', onClick: () => onNavigate('shop') },
-          { icon: <Trophy className={isHinglish ? 'text-orange-400' : isDark ? 'text-orange-400' : 'text-orange-500'} size={20} />, label: t('siddhiLabel', lang), value: `${unlockedCount}/${achievements.length}`, sub: t('unlocked', lang), emoji: '🏆', onClick: () => onNavigate('achievements') },
+          { icon: <Target className={iconA} size={20} />, label: t('todaysKarma', lang), value: `${completedToday}/${totalToday}`, sub: t('questsDone', lang), emoji: '🎯', onClick: () => (onNavigateTodaysKarma ? onNavigateTodaysKarma() : onNavigate('quests')) },
+          { icon: <TrendingUp className={iconB} size={20} />, label: t('totalPunya', lang), value: `${stats.totalXpEarned ?? stats.xp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨', onClick: () => onNavigate('achievements') },
+          { icon: <Zap className={iconC} size={20} />, label: t('goldMudras', lang), value: `${stats.coins}`, sub: t('keepGrinding', lang), emoji: '🪙', onClick: () => onNavigate('shop') },
+          { icon: <Trophy className={iconD} size={20} />, label: t('siddhiLabel', lang), value: `${unlockedCount}/${achievements.length}`, sub: t('unlocked', lang), emoji: '🏆', onClick: () => onNavigate('achievements') },
         ].map((item, i) => (
-          <div key={i} onClick={item.onClick} className={`${card} rounded-2xl p-4 hover:shadow-md transition-all duration-300 group cursor-pointer hover:-translate-y-0.5`}>
+          <div key={i} onClick={item.onClick} className={`${card} rounded-2xl p-4 sm:p-5 transition-all duration-300 group cursor-pointer hover:-translate-y-0.5`}>
             <div className="flex items-start justify-between">
               <div>
                 <p className={`text-[11px] font-medium ${ts}`}>{item.label}</p>
-                <p className={`text-xl font-bold mt-0.5 ${tp}`}>{item.value}</p>
+                <p className={`text-[22px] font-black mt-0.5 ${tp}`}>{item.value}</p>
                 <p className={`text-[11px] mt-0.5 ${tm}`}>{item.sub}</p>
               </div>
               <span className="text-xl opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all">{item.emoji}</span>
@@ -175,22 +175,18 @@ export function Dashboard({
           </h3>
           <div className="relative flex items-center justify-center py-3">
             <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
-              <circle cx="60" cy="60" r="52" fill="none" stroke={isDark ? 'rgba(255,255,255,0.04)' : '#F1F5F9'} strokeWidth="8" />
+              <circle cx="60" cy="60" r="52" fill="none" stroke={ringTrack} strokeWidth="8" />
               <circle
                 cx="60" cy="60" r="52" fill="none"
-                stroke={isHinglish ? 'url(#gradHinglish)' : 'url(#gradPro)'}
+                stroke={'url(#gradTheme)'}
                 strokeWidth="8" strokeLinecap="round"
                 strokeDasharray={`${progressPercent * 3.27} 327`}
                 className="transition-all duration-1000"
               />
               <defs>
-                <linearGradient id="gradPro" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#6366F1" />
-                  <stop offset="100%" stopColor="#8B5CF6" />
-                </linearGradient>
-                <linearGradient id="gradHinglish" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#F43F5E" />
-                  <stop offset="100%" stopColor="#A855F7" />
+                <linearGradient id="gradTheme" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="var(--kq-xp-start)" />
+                  <stop offset="100%" stopColor="var(--kq-xp-end)" />
                 </linearGradient>
               </defs>
             </svg>
@@ -201,12 +197,13 @@ export function Dashboard({
           </div>
           <div className="mt-1 space-y-1.5">
             {activeQuests.slice(0, 3).map(q => (
-              <div key={q.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${
-                isDark ? 'bg-white/[0.02]' : 'bg-slate-50/60'
-              }`}>
+              <div
+                key={q.id}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border border-[var(--kq-border)] bg-[var(--kq-bg2)]`}
+              >
                 <span className="text-xs">{isHinglish ? '💪' : '🏹'}</span>
-                <span className={`text-[12px] font-medium truncate flex-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{q.title}</span>
-                <span className={`text-[10px] font-semibold ${isHinglish ? 'text-indigo-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'}`}>+{q.xpReward}</span>
+                <span className={`text-[12px] font-medium truncate flex-1 ${ts}`}>{q.title}</span>
+                <span className={`text-[10px] font-black text-[var(--kq-primary)]`}>+{q.xpReward}</span>
               </div>
             ))}
           </div>
@@ -218,17 +215,19 @@ export function Dashboard({
             <h3 className={`text-sm font-semibold ${tp} flex items-center gap-2`}>
               <span className="text-base">{isHinglish ? '📝' : '📜'}</span> {t('recentScrolls', lang)}
             </h3>
-            <button onClick={() => onNavigate('notes')} className={`text-[11px] font-medium flex items-center gap-1 ${
-              isHinglish ? 'text-indigo-400 hover:text-indigo-500' : isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-500 hover:text-indigo-600'
-            }`}>
+            <button
+              onClick={() => onNavigate('notes')}
+              className="text-[11px] font-semibold flex items-center gap-1 text-[var(--kq-primary)] hover:opacity-90"
+            >
               {t('viewAll', lang)} <ArrowRight size={11} />
             </button>
           </div>
           <div className="space-y-2">
             {notes.slice(0, 4).map(note => (
-              <div key={note.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl transition-all cursor-pointer group ${
-                isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50'
-              }`}>
+              <div
+                key={note.id}
+                className="flex items-start gap-2.5 p-2.5 rounded-xl transition-all cursor-pointer group hover:bg-[var(--kq-bg2)]"
+              >
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0" style={{ backgroundColor: `${note.color}10` }}>
                   {note.emoji}
                 </div>
@@ -250,9 +249,7 @@ export function Dashboard({
               <span className="text-base">{isHinglish ? '🔥' : '🪔'}</span> {t('tapasyaStreak', lang)}
             </h3>
             <div className="flex items-center gap-3">
-              <div className={`text-4xl font-black bg-clip-text text-transparent ${
-                isHinglish ? 'bg-gradient-to-r from-indigo-400 to-violet-400' : 'bg-gradient-to-r from-indigo-400 to-violet-400'
-              }`}>
+              <div className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)]">
                 {stats.streak}
               </div>
               <div>
@@ -267,8 +264,8 @@ export function Dashboard({
                   key={i}
                   className={`flex-1 h-2 rounded-full transition-all ${
                     i < (stats.streak % 7 || (stats.streak > 0 ? 7 : 0))
-                      ? isHinglish ? 'bg-gradient-to-r from-indigo-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
-                      : isDark ? 'bg-white/[0.04]' : 'bg-slate-100'
+                      ? 'bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)]'
+                      : 'bg-[var(--kq-bg2)]'
                   }`}
                 />
               ))}
@@ -277,22 +274,17 @@ export function Dashboard({
           </div>
 
           {/* Weekly Boss */}
-          <div className={`relative overflow-hidden rounded-2xl p-5 text-white shadow-md ${
-            isHinglish
-              ? 'bg-gradient-to-br from-indigo-500/90 via-violet-600/90 to-indigo-600/90'
-              : isDark
-                ? 'bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800'
-                : 'bg-gradient-to-br from-slate-700 via-slate-600 to-slate-700'
-          }`}>
+          <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-[var(--kq-shadow-card)] kq-gradient-135 border border-white/10">
             <div className="absolute top-2 right-3 text-5xl opacity-10">{isHinglish ? '👹' : '🔱'}</div>
             <div className="relative z-10">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">{t('weeklyAsura', lang)}</p>
               <h4 className="text-base font-bold mt-1">{t('ravanaTitle', lang)}</h4>
               <p className="text-[11px] mt-1 text-white/50">{t('ravanaDesc', lang)}</p>
               <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${
-                  isHinglish ? 'bg-gradient-to-r from-indigo-300 to-violet-300' : 'bg-gradient-to-r from-indigo-400 to-violet-400'
-                }`} style={{ width: `${Math.min(100,  (completedThisWeek / weeklyQuestTarget) * 100)}%` }} />
+                <div
+                  className="h-full rounded-full transition-all bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)]"
+                  style={{ width: `${Math.min(100,  (completedThisWeek / weeklyQuestTarget) * 100)}%` }}
+                />
               </div>
               <p className="text-[10px] mt-1 text-white/40">{completedThisWeek}/{weeklyQuestTarget} {t('questsLabel', lang)} · {t('rewardLabel', lang)}: 500 {(lang === 'pro' || isHinglish) ? 'XP' : 'Punya'} + 🏆</p>
             </div>

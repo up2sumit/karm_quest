@@ -332,7 +332,14 @@ export function sidebarSkinClasses(skinId: SidebarSkinId | string | undefined, t
     if (theme === 'modern') return { bg: 'bg-[#1E2322]/95', accent: 'bg-[var(--kq-primary)]' };
     // Indigo Dark (Theme 4)
     if (theme === 'hinglish') return { bg: 'bg-gradient-to-br from-[#0C0C1A]/95 to-[#1B1B3A]/95', accent: 'bg-indigo-500' };
-    // Light themes (Saffron Light + Chakra Rings)
+    // Theme 1 (Saffron Light): warm sidebar gradient (orange/brown) like the reference
+    if (theme === 'light') {
+      return {
+        bg: 'bg-gradient-to-b from-[#6B2A00] via-[#B45309] to-[#F59E0B]',
+        accent: 'bg-[#FFE2B8]',
+      };
+    }
+    // Theme 3 (Chakra Rings): light UI with blue/violet accents → keep a cooler sidebar
     return { bg: 'bg-gradient-to-br from-slate-900/95 to-indigo-900/90', accent: 'bg-indigo-400' };
   }
 

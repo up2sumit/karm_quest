@@ -54,22 +54,19 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
     );
   }, [isHinglish, isPro, report.weekEnd, report.weekStart, report.questsCompleted, report.streakDays, report.xpEarned]);
 
+  const darkLike = isDark || isHinglish;
   const cardShell = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)]'
-    : isDark
-      ? 'bg-white/[0.03] border border-white/[0.06]'
-      : isHinglish
-        ? 'bg-white/70 border border-indigo-200/30'
-        : 'bg-white/80 border border-slate-200/40';
+    : darkLike
+      ? 'bg-white/[0.04] border border-white/[0.06]'
+      : 'bg-white/80 border border-slate-200/40';
 
-  const tp = isModern ? 'text-[var(--kq-text-primary)]' : isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const tp = isModern ? 'text-[var(--kq-text-primary)]' : darkLike ? 'text-slate-200' : 'text-slate-800';
+  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : darkLike ? 'text-slate-400' : 'text-slate-500';
 
-  const grad = isHinglish
-    ? 'bg-gradient-to-br from-indigo-500 via-violet-500 to-indigo-500'
-    : isDark
-      ? 'bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700'
-      : 'bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600';
+  const grad = darkLike
+    ? 'bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700'
+    : 'bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600';
 
   const copy = async () => {
     try {
@@ -235,13 +232,12 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
           <div className="flex items-center gap-2">
             <button
               onClick={() => setOpen(true)}
-              className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all ${
-                isModern
+              className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all ${isModern
                   ? 'bg-[var(--kq-primary-soft)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] hover:bg-[var(--kq-primary-soft)]'
                   : isDark
                     ? 'bg-white/[0.03] text-slate-200 hover:bg-white/[0.05]'
                     : 'bg-slate-900/5 text-slate-700 hover:bg-slate-900/10'
-              }`}
+                }`}
             >
               Open
             </button>
@@ -300,13 +296,12 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
                     <div className="flex items-center gap-2 justify-end">
                       <button
                         onClick={copy}
-                        className={`px-3 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition-all ${
-                          isModern
+                        className={`px-3 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition-all ${isModern
                             ? 'bg-[var(--kq-primary-soft)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] hover:bg-[var(--kq-primary-soft)]'
                             : isDark
                               ? 'bg-white/[0.03] text-slate-200 hover:bg-white/[0.05]'
                               : 'bg-slate-900/5 text-slate-700 hover:bg-slate-900/10'
-                        }`}
+                          }`}
                       >
                         <Copy size={14} /> Copy text
                       </button>
@@ -319,13 +314,12 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
               {toast ? (
                 <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[110]">
                   <div
-                    className={`px-4 py-2 rounded-full text-[12px] font-semibold shadow-lg ${
-                      isModern
+                    className={`px-4 py-2 rounded-full text-[12px] font-semibold shadow-lg ${isModern
                         ? 'bg-[var(--kq-surface)] text-[var(--kq-text-primary)] border border-[var(--kq-border)]'
                         : isDark
                           ? 'bg-white/[0.06] text-slate-200 border border-white/[0.08]'
                           : 'bg-white text-slate-800 border border-slate-200'
-                    }`}
+                      }`}
                   >
                     {toast}
                   </div>

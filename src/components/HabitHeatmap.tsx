@@ -76,7 +76,7 @@ function levelForCount(count: number): 0 | 1 | 2 | 3 {
   return 3;
 }
 
-type HeatMode = 'constellation' | 'orbit' | 'grid';
+type HeatMode = 'constellation' | 'orbit' | 'chakra';
 
 type DayDatum = {
   iso: string;
@@ -305,15 +305,26 @@ function ConstellationCanvas(props: {
   }, [wrap.w, isDark, selectedISO, days]);
 
   const getHoveredIdx = (mx: number, my: number) => {
+    // Old behaviour required the pointer to be very close to a star,
+    // which made selection on touchpads / high-DPI screens feel "static".
+    // New behaviour snaps to the nearest star if you're reasonably close.
     const arr = posRef.current;
+    let bestIdx = -1;
+    let bestDist = Number.POSITIVE_INFINITY;
     for (let i = 0; i < arr.length; i++) {
       const p = arr[i];
-      const r = starRadius(days[i]?.count ?? 0) + 10;
       const dx = mx - p.x;
       const dy = my - p.y;
-      if (Math.sqrt(dx * dx + dy * dy) < r) return i;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
     }
-    return -1;
+    if (bestIdx < 0) return -1;
+    // Generous threshold so users can reliably hit older days.
+    const threshold = starRadius(days[bestIdx]?.count ?? 0) + 18;
+    return bestDist <= threshold ? bestIdx : -1;
   };
 
   const onMove = (mx: number, my: number) => {
@@ -355,6 +366,12 @@ function ConstellationCanvas(props: {
             onSelectISO(days[idx].iso);
             draw();
           }
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+          const t = e.touches[0];
+          onMove(t.clientX - rect.left, t.clientY - rect.top);
         }}
       />
     </div>
@@ -503,8 +520,12 @@ function OrbitCanvas(props: {
     const idx = Math.floor((a / (Math.PI * 2)) * days.length);
     const dist = Math.sqrt(dx * dx + dy * dy);
     const baseR = Math.min(w, height) * 0.28;
-    // generous band so hover is easy
-    if (dist < baseR - 24 || dist > baseR + 70) return -1;
+    // Previously the band was too strict, so Orbit felt "unclickable".
+    // Make it more forgiving while still preventing random clicks near the center.
+    const minDim = Math.min(w, height);
+    const inner = baseR - Math.max(36, minDim * 0.16);
+    const outer = baseR + Math.max(92, minDim * 0.30);
+    if (dist < inner || dist > outer) return -1;
     return clamp(idx, 0, days.length - 1);
   };
 
@@ -548,6 +569,12 @@ function OrbitCanvas(props: {
             draw();
           }
         }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+          const t = e.touches[0];
+          onMove(t.clientX - rect.left, t.clientY - rect.top);
+        }}
       />
     </div>
   );
@@ -580,7 +607,8 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
   const [mode, setMode] = useState<HeatMode>(() => {
     try {
       const v = localStorage.getItem('kq_heatmap_mode_v1');
-      if (v === 'orbit' || v === 'grid' || v === 'constellation') return v;
+      if (v === 'orbit' || v === 'constellation') return v;
+      if (v === 'grid' || v === 'chakra') return 'chakra';
     } catch {
       // ignore
     }
@@ -641,40 +669,49 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
   }, [entries]);
 
   const completionsByDay = useMemo(() => {
-    // Prefer true completion history when available; fall back to quest.completedAt.
     const map = new Map<string, number>();
-
-    if (completionEvents.length > 0) {
-      for (const ev of completionEvents) {
-        map.set(ev.day, (map.get(ev.day) ?? 0) + 1);
-      }
-      return map;
-    }
+    const seen = new Set<string>();
 
     for (const q of quests) {
       const iso = (q.completedAt || '').trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
       map.set(iso, (map.get(iso) ?? 0) + 1);
+      seen.add(`${q.id}:${iso}`);
     }
+
+    for (const ev of completionEvents) {
+      if (!ev.questId) continue;
+      const key = `${ev.questId}:${ev.day}`;
+      if (!seen.has(key)) {
+        map.set(ev.day, (map.get(ev.day) ?? 0) + 1);
+        seen.add(key);
+      }
+    }
+
     return map;
   }, [quests, completionEvents]);
 
   const xpByDay = useMemo(() => {
     const map = new Map<string, number>();
-
-    if (completionEvents.length > 0) {
-      for (const ev of completionEvents) {
-        map.set(ev.day, (map.get(ev.day) ?? 0) + (ev.xp || 0));
-      }
-      return map;
-    }
+    const seen = new Set<string>();
 
     for (const q of quests) {
       const iso = (q.completedAt || '').trim();
       if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(iso)) continue;
       const xp = (q.earnedXp ?? q.xpReward ?? 0) as number;
       map.set(iso, (map.get(iso) ?? 0) + xp);
+      seen.add(`${q.id}:${iso}`);
     }
+
+    for (const ev of completionEvents) {
+      if (!ev.questId) continue;
+      const key = `${ev.questId}:${ev.day}`;
+      if (!seen.has(key)) {
+        map.set(ev.day, (map.get(ev.day) ?? 0) + (ev.xp || 0));
+        seen.add(key);
+      }
+    }
+
     return map;
   }, [quests, completionEvents]);
 
@@ -856,11 +893,11 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => setMode('grid')}
-              className={`${pill} ${mode === 'grid' ? pillOn : pillOff}`}
-              title="Classic grid"
+              onClick={() => setMode('chakra')}
+              className={`${pill} ${mode === 'chakra' ? pillOn : pillOff}`}
+              title="Chakra Rings"
             >
-              ▦ Grid
+              ☸ Chakra
             </button>
           </div>
 
@@ -877,84 +914,130 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
         </div>
       </div>
 
-      {mode === 'grid' ? (
-        <div className="mt-4 overflow-x-auto">
-          <div className="inline-block min-w-max">
-            {/* Month labels */}
-            <div className="flex items-center">
-              <div className="w-10" />
-              <div
-                className="grid"
-                style={{
-                  gridTemplateColumns: `repeat(${weeks}, var(--hq-cell))`,
-                  columnGap: 'var(--hq-gap)',
-                }}
-              >
-                {Array.from({ length: weeks }).map((_, col) => {
-                  const label = monthLabels.find((m) => m.col === col)?.label ?? '';
-                  return (
-                    <div key={col} className={`text-[10px] ${ts} select-none`} style={{ width: 'var(--hq-cell)' as any }}>
-                      {label}
-                    </div>
-                  );
-                })}
+      {mode === 'chakra' ? (
+        <div className="mt-4 flex flex-col md:flex-row items-center justify-center gap-8 py-4 animate-fade-in">
+          <div className="relative w-64 h-64 shrink-0">
+            <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-sm">
+              {/* Background rings */}
+              {Array.from({ length: weeks }).map((_, w) => {
+                const rIn = 35 + w * 14;
+                const rOut = rIn + 11;
+                return (
+                  <circle
+                    key={`bg-${w}`}
+                    cx="100" cy="100"
+                    r={(rIn + rOut) / 2}
+                    strokeWidth="11"
+                    fill="none"
+                    stroke={isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'}
+                  />
+                );
+              })}
+              {/* Segmented active days */}
+              {cells.map((c) => {
+                const count = c.inRange ? (completionsByDay.get(c.iso) ?? 0) : 0;
+                const isHover = hoveredISO === c.iso;
+                const isSelected = selectedISO === c.iso;
+                const rIn = 35 + c.col * 14;
+                const rOut = rIn + 11;
+                const a0 = -Math.PI / 2 + (c.row / 7) * Math.PI * 2;
+                const a1 = -Math.PI / 2 + ((c.row + 1) / 7) * Math.PI * 2;
+
+                const pad = 0.04;
+                const start = a0 + pad / 2;
+                const end = a1 - pad / 2;
+                if (end <= start) return null;
+
+                const x1 = 100 + rIn * Math.cos(start);
+                const y1 = 100 + rIn * Math.sin(start);
+                const x2 = 100 + rOut * Math.cos(start);
+                const y2 = 100 + rOut * Math.sin(start);
+                const x3 = 100 + rOut * Math.cos(end);
+                const y3 = 100 + rOut * Math.sin(end);
+                const x4 = 100 + rIn * Math.cos(end);
+                const y4 = 100 + rIn * Math.sin(end);
+                const largeArc = end - start > Math.PI ? 1 : 0;
+                const d = `M ${x1} ${y1} L ${x2} ${y2} A ${rOut} ${rOut} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${rIn} ${rIn} 0 ${largeArc} 0 ${x1} ${y1} Z`;
+
+                let fill = 'transparent';
+                if (c.inRange) {
+                  const lvl = levelForCount(count);
+                  if (lvl === 0) fill = isDark ? 'rgba(251, 146, 60, 0.06)' : 'rgba(251, 146, 60, 0.12)';
+                  else if (lvl === 1) fill = isDark ? '#FDE047' : '#FDE047'; // yellow
+                  else if (lvl === 2) fill = isDark ? '#FB923C' : '#F97316'; // orange
+                  else fill = isDark ? '#EA580C' : '#C2410C'; // dark orange
+                }
+
+                return (
+                  <path
+                    key={c.iso}
+                    d={d}
+                    fill={fill}
+                    className="transition-all duration-300 cursor-pointer outline-none"
+                    style={{
+                      transformOrigin: '100px 100px',
+                      transform: isHover || isSelected ? 'scale(1.04)' : 'scale(1)',
+                      filter: (isHover || isSelected) && c.inRange ? 'brightness(1.15) drop-shadow(0 2px 4px rgba(251,146,60,0.3))' : 'none',
+                      zIndex: isHover || isSelected ? 10 : 1 // SVG z-index requires DOM order unless using filter hacks
+                    }}
+                    onMouseEnter={() => {
+                      if (c.inRange) setHoveredISO(c.iso);
+                    }}
+                    onMouseLeave={() => {
+                      if (c.inRange && hoveredISO === c.iso) setHoveredISO(null);
+                    }}
+                    onClick={() => {
+                      if (c.inRange) setSelectedISO(cur => cur === c.iso ? null : c.iso);
+                    }}
+                  />
+                );
+              })}
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <div className="text-3xl font-serif font-bold" style={{ color: isDark ? '#FB923C' : '#EA580C' }}>
+                {stats.total}
+              </div>
+              <div className={`text-[10px] font-bold tracking-widest uppercase mt-0.5 ${ts}`}>
+                Quests
               </div>
             </div>
+          </div>
 
-            <div className="flex items-start mt-1">
-              {/* Day labels (Mon/Wed/Fri) aligned to cells */}
-              <div
-                className={`w-10 pr-2 text-[10px] ${ts} select-none grid grid-rows-7`}
-                style={{
-                  rowGap: 'var(--hq-gap)',
-                }}
-              >
-                {['Mon', '', 'Wed', '', 'Fri', '', ''].map((lbl, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-end"
-                    style={{ height: 'var(--hq-cell)' as any }}
-                  >
-                    {lbl}
+          <div className="flex sm:hidden w-full px-4 items-center justify-center text-[11px] uppercase tracking-widest text-[#EA580C]">
+            <span className="opacity-70">← Tap a ring segment →</span>
+          </div>
+
+          <div className="hidden sm:flex flex-col flex-1 w-full max-w-[280px]">
+            <div className={`text-[11px] font-bold uppercase tracking-widest mb-4`} style={{ color: isDark ? '#F97316' : '#C2410C', opacity: 0.8 }}>
+              Weekly Breakdown
+            </div>
+            <div className="space-y-3.5">
+              {Array.from({ length: weeks }).map((_, w) => {
+                const wCells = cells.filter(c => c.col === w && c.inRange);
+                const wSum = wCells.reduce((acc, c) => acc + (completionsByDay.get(c.iso) ?? 0), 0);
+                const maxW = Math.max(1, ...Array.from({ length: weeks }).map((_, maxWait) =>
+                  cells.filter(cx => cx.col === maxWait && cx.inRange).reduce((acc, cx) => acc + (completionsByDay.get(cx.iso) ?? 0), 0)
+                ));
+                const pct = Math.max(0, Math.min(100, (wSum / maxW) * 100));
+
+                return (
+                  <div key={w} className="flex items-center gap-3 text-[11px] font-semibold">
+                    <div className="w-8" style={{ color: isDark ? '#FDBA74' : '#9A3412', opacity: 0.7 }}>Wk{w + 1}</div>
+                    <div className={`flex-1 h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
+                      <div
+                        className="h-full rounded-full transition-all duration-700 ease-out"
+                        style={{
+                          width: `${pct}%`,
+                          background: isDark ? 'linear-gradient(to right, #FB923C, #FDE047)' : 'linear-gradient(to right, #EA580C, #F59E0B)'
+                        }}
+                      />
+                    </div>
+                    <div className="w-6 text-right font-bold" style={{ color: isDark ? '#FB923C' : '#EA580C' }}>
+                      {wSum}
+                    </div>
                   </div>
-                ))}
-              </div>
-
-              <div className="grid grid-rows-7 grid-flow-col" style={{ gap: 'var(--hq-gap)' }}>
-                {cells.map((c) => {
-                  const count = c.inRange ? (completionsByDay.get(c.iso) ?? 0) : 0;
-                  const lvl = levelForCount(count);
-                  const mood = moodByDay.get(c.iso) ?? null;
-                  const isSelected = selectedISO === c.iso;
-                  const isToday = c.iso === endISO;
-
-                  const tooltipParts: string[] = [];
-                  tooltipParts.push(
-                    c.date.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
-                  );
-                  tooltipParts.push(`${count} quest${count === 1 ? '' : 's'} completed`);
-                  if (mood) tooltipParts.push(`Mood ${moodEmoji(mood.mood)} · Productivity ${mood.productivity}`);
-                  const tooltip = tooltipParts.join(' — ');
-
-                  return (
-                    <button
-                      key={c.iso}
-                      type="button"
-                      title={tooltip}
-                      onClick={() => {
-                        if (!c.inRange) return;
-                        setSelectedISO((cur) => (cur === c.iso ? null : c.iso));
-                      }}
-                      className={`w-[var(--hq-cell)] h-[var(--hq-cell)] rounded transition-all ${levelClass(lvl, c.inRange)} ${
-                        c.inRange ? 'hover:scale-[1.06]' : 'cursor-default'
-                      } ${isSelected ? 'ring-2 ring-emerald-400/60' : ''} ${
-                        isToday ? (isDark ? 'outline outline-1 outline-white/25' : 'outline outline-1 outline-slate-300/70') : ''
-                      }`}
-                      aria-label={tooltip}
-                    />
-                  );
-                })}
-              </div>
+                );
+              }).reverse()}
             </div>
           </div>
         </div>
@@ -1002,9 +1085,8 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
 
           {/* Quick detail + summary */}
           <div
-            className={`mt-3 rounded-2xl p-3 sm:p-4 border ${
-              isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-slate-50/60 border-slate-200/50'
-            }`}
+            className={`mt-3 rounded-2xl p-3 sm:p-4 border ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-slate-50/60 border-slate-200/50'
+              }`}
           >
             {(() => {
               const previewISO = hovered?.iso ?? selected?.iso ?? endISO;
@@ -1065,9 +1147,8 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
       {/* Selected day detail */}
       {selected ? (
         <div
-          className={`mt-4 rounded-2xl p-3 sm:p-4 ${isDark ? 'bg-white/[0.02]' : 'bg-slate-50/60'} border ${
-            isDark ? 'border-white/[0.06]' : 'border-slate-200/50'
-          }`}
+          className={`mt-4 rounded-2xl p-3 sm:p-4 ${isDark ? 'bg-white/[0.02]' : 'bg-slate-50/60'} border ${isDark ? 'border-white/[0.06]' : 'border-slate-200/50'
+            }`}
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
             <div>
@@ -1087,13 +1168,12 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
             <button
               type="button"
               onClick={() => setSelectedISO(null)}
-              className={`self-start sm:self-auto text-[11px] font-semibold px-3 py-1.5 rounded-xl transition-all border ${
-                isHinglish
-                  ? 'text-indigo-500 border-indigo-200/40 hover:bg-indigo-50'
-                  : isDark
-                    ? 'text-indigo-300 border-white/[0.08] hover:bg-white/[0.04]'
-                    : 'text-indigo-600 border-slate-200 hover:bg-slate-50'
-              }`}
+              className={`self-start sm:self-auto text-[11px] font-semibold px-3 py-1.5 rounded-xl transition-all border ${isHinglish
+                ? 'text-indigo-500 border-indigo-200/40 hover:bg-indigo-50'
+                : isDark
+                  ? 'text-indigo-300 border-white/[0.08] hover:bg-white/[0.04]'
+                  : 'text-indigo-600 border-slate-200 hover:bg-slate-50'
+                }`}
             >
               {isHinglish ? 'Band' : 'Close'}
             </button>

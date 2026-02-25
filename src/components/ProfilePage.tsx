@@ -33,8 +33,8 @@ interface ProfilePageProps {
 }
 
 const avatarEmojis = [
-  '🧘','🪔','🦁','🦚','🐯','🐉','🧠','👑','⚔️','🏹','🛡️','🧿','✨','🔥','🌙','🌞','🌿','🌸','🍀','💎',
-  '🧑‍💻','🧑‍🎓','🧑‍🚀','🧑‍🍳','🧑‍🎨','🧑‍🔬','🧑‍🏫','🧑‍💼',
+  '🧘', '🪔', '🦁', '🦚', '🐯', '🐉', '🧠', '👑', '⚔️', '🏹', '🛡️', '🧿', '✨', '🔥', '🌙', '🌞', '🌿', '🌸', '🍀', '💎',
+  '🧑‍💻', '🧑‍🎓', '🧑‍🚀', '🧑‍🍳', '🧑‍🎨', '🧑‍🔬', '🧑‍🏫', '🧑‍💼',
 ];
 
 function StatPill({
@@ -50,22 +50,19 @@ function StatPill({
   isHinglish: boolean;
   isModern: boolean;
 }) {
+  const darkLike = isDark || isHinglish;
   const pill = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)]'
-    : isHinglish
-      ? 'bg-white/70 border border-indigo-200/30'
-      : isDark
-        ? 'bg-white/[0.03] border border-white/[0.06]'
-        : 'bg-white/70 border border-slate-200/50';
+    : darkLike
+      ? 'bg-white/[0.04] border border-white/[0.06]'
+      : 'bg-white/70 border border-slate-200/50';
 
-  const labelCl = isModern ? 'text-[var(--kq-text-muted)]' : 'text-slate-500';
+  const labelCl = isModern ? 'text-[var(--kq-text-muted)]' : darkLike ? 'text-slate-500' : 'text-slate-500';
   const valueCl = isModern
     ? 'text-[var(--kq-text-primary)]'
-    : isHinglish
-      ? 'text-indigo-600'
-      : isDark
-        ? 'text-slate-100'
-        : 'text-slate-900';
+    : darkLike
+      ? 'text-slate-100'
+      : 'text-slate-900';
 
   return (
     <div className={`rounded-2xl px-4 py-3 ${pill}`}>
@@ -116,27 +113,23 @@ export function ProfilePage({
 
   const [inspectorOpen, setInspectorOpen] = useState(false);
 
+  const darkLike = isDark || isHinglish;
+
   const card = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-sm'
-    : isHinglish
-      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
-      : isDark
-        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] shadow-sm'
-        : 'bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm';
-  const tp = isModern ? 'text-[var(--kq-text-primary)]' : (isHinglish ? 'text-slate-900' : isDark ? 'text-slate-100' : 'text-slate-900');
-  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : (isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500');
+    : darkLike
+      ? 'bg-white/[0.04] backdrop-blur-xl border border-white/[0.06] shadow-sm'
+      : 'bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm';
+  const tp = isModern ? 'text-[var(--kq-text-primary)]' : (darkLike ? 'text-slate-100' : 'text-slate-900');
+  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : (darkLike ? 'text-slate-400' : 'text-slate-500');
   const btnPrimary = isModern
     ? 'bg-[var(--kq-primary)] hover:bg-[var(--kq-primary-light)]'
-    : isHinglish
-      ? 'bg-gradient-to-r from-indigo-500 to-violet-500'
-      : 'bg-gradient-to-r from-indigo-500 to-violet-500';
+    : 'bg-gradient-to-r from-indigo-500 to-violet-500';
   const btnSoft = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] hover:bg-[var(--kq-primary-soft)]'
-    : isHinglish
-      ? 'bg-white/70 border border-indigo-200/30 hover:bg-white'
-      : isDark
-        ? 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]'
-        : 'bg-white/70 border border-slate-200/60 hover:bg-white';
+    : darkLike
+      ? 'bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06]'
+      : 'bg-white/70 border border-slate-200/60 hover:bg-white';
 
   const totals = useMemo(() => {
     const totalQuests = quests.length;
@@ -164,14 +157,14 @@ export function ProfilePage({
     if (!q) return avatarEmojis;
     // Minimal keywording without adding a big emoji dataset
     const map: Record<string, string[]> = {
-      yoga: ['🧘','🌿'],
-      warrior: ['⚔️','🏹','🛡️','👑'],
+      yoga: ['🧘', '🌿'],
+      warrior: ['⚔️', '🏹', '🛡️', '👑'],
       mind: ['🧠'],
       fire: ['🔥'],
       moon: ['🌙'],
       sun: ['🌞'],
       dev: ['🧑‍💻'],
-      study: ['🧑‍🎓','📚'],
+      study: ['🧑‍🎓', '📚'],
     };
     return (map[q] || avatarEmojis.filter(e => e.includes(q)))
       .filter((v, i, a) => a.indexOf(v) === i);
@@ -281,7 +274,7 @@ export function ProfilePage({
       </div>
 
       {/* Identity */}
-      <div className={`${card} rounded-3xl p-5 md:p-6`}> 
+      <div className={`${card} rounded-3xl p-5 md:p-6`}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
             <button
@@ -301,9 +294,8 @@ export function ProfilePage({
               <button
                 onClick={() => avatarInputRef.current?.click()}
                 disabled={!authUserId}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
-                  authUserId ? btnSoft : 'opacity-50 cursor-not-allowed ' + btnSoft
-                }`}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${authUserId ? btnSoft : 'opacity-50 cursor-not-allowed ' + btnSoft
+                  }`}
                 title={authUserId ? (isHinglish ? 'Photo upload karo' : 'Upload a photo') : 'Sign in to upload'}
               >
                 <ImageIcon size={14} /> {isHinglish ? 'Upload' : 'Upload'}
@@ -336,13 +328,10 @@ export function ProfilePage({
                 <input
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  className={`px-3 py-2 rounded-xl text-[13px] outline-none ${
-                    isHinglish
-                      ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
-                      : isDark
-                        ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
-                        : 'bg-white/70 border border-slate-200/60 text-slate-900'
-                  }`}
+                  className={`px-3 py-2 rounded-xl text-[13px] outline-none ${darkLike
+                    ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
+                    : 'bg-white/70 border border-slate-200/60 text-slate-900'
+                    }`}
                 />
                 <button
                   onClick={saveProfile}
@@ -367,17 +356,16 @@ export function ProfilePage({
             </div>
             <button
               onClick={() => onToggleSfx(!sfxEnabled)}
-              className={`ml-auto w-12 h-7 rounded-full relative transition-all ${
-                sfxEnabled
-                  ? isHinglish
-                    ? 'bg-indigo-500'
-                    : isDark
-                      ? 'bg-indigo-500'
-                      : 'bg-indigo-600'
+              className={`ml-auto w-12 h-7 rounded-full relative transition-all ${sfxEnabled
+                ? isHinglish
+                  ? 'bg-indigo-500'
                   : isDark
-                    ? 'bg-white/[0.10]'
-                    : 'bg-slate-200'
-              }`}
+                    ? 'bg-indigo-500'
+                    : 'bg-indigo-600'
+                : isDark
+                  ? 'bg-white/[0.10]'
+                  : 'bg-slate-200'
+                }`}
               aria-label="Toggle sound effects"
             >
               <span
@@ -396,13 +384,10 @@ export function ProfilePage({
                 value={emojiQuery}
                 onChange={e => setEmojiQuery(e.target.value)}
                 placeholder={isHinglish ? 'Search: yoga / dev / warrior…' : 'Search: yoga / dev / warrior…'}
-                className={`px-3 py-2 rounded-xl text-[12px] outline-none ${
-                  isHinglish
-                    ? 'bg-white/70 border border-indigo-200/30 text-slate-900'
-                    : isDark
-                      ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
-                      : 'bg-white/70 border border-slate-200/60 text-slate-900'
-                }`}
+                className={`px-3 py-2 rounded-xl text-[12px] outline-none ${darkLike
+                  ? 'bg-white/[0.03] border border-white/[0.06] text-slate-100'
+                  : 'bg-white/70 border border-slate-200/60 text-slate-900'
+                  }`}
               />
             </div>
             <div className="mt-3 grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 gap-2">
@@ -410,9 +395,8 @@ export function ProfilePage({
                 <button
                   key={e}
                   onClick={() => { setAvatar(e); setShowEmojiPicker(false); setEmojiQuery(''); }}
-                  className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl transition-all ${
-                    isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-black/[0.04]'
-                  } ${e === avatar ? (isHinglish ? 'bg-indigo-500/15' : isDark ? 'bg-indigo-500/15' : 'bg-indigo-500/10') : ''}`}
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl transition-all ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-black/[0.04]'
+                    } ${e === avatar ? (isHinglish ? 'bg-indigo-500/15' : isDark ? 'bg-indigo-500/15' : 'bg-indigo-500/10') : ''}`}
                   title={e}
                 >
                   {e}
@@ -459,11 +443,10 @@ export function ProfilePage({
                   <button
                     onClick={() => void offlineSync.flushNow()}
                     disabled={!offlineSync.online || offlineSync.flushing}
-                    className={`ml-3 px-2 py-0.5 rounded-lg text-[11px] font-semibold ${
-                      !offlineSync.online || offlineSync.flushing
-                        ? (isDark ? 'bg-white/[0.04] text-slate-500' : 'bg-slate-100 text-slate-400')
-                        : (isHinglish ? 'bg-indigo-500/15 text-indigo-600' : isDark ? 'bg-indigo-500/15 text-indigo-300' : 'bg-indigo-50 text-indigo-700')
-                    }`}
+                    className={`ml-3 px-2 py-0.5 rounded-lg text-[11px] font-semibold ${!offlineSync.online || offlineSync.flushing
+                      ? (isDark ? 'bg-white/[0.04] text-slate-500' : 'bg-slate-100 text-slate-400')
+                      : (darkLike ? 'bg-indigo-500/15 text-indigo-300' : 'bg-indigo-50 text-indigo-700')
+                      }`}
                     title={offlineSync.online ? 'Sync queued changes now' : 'Go online to sync'}
                   >
                     {offlineSync.flushing ? 'Syncing…' : 'Sync now'}
@@ -474,7 +457,7 @@ export function ProfilePage({
             ) : null}
 
             {cloudMsg ? (
-              <div className={`mt-2 text-xs ${cloudMsg.includes('failed') ? 'text-[tomato]' : (isHinglish ? 'text-indigo-700' : isDark ? 'text-amber-200' : 'text-slate-800')}`}>
+              <div className={`mt-2 text-xs ${cloudMsg.includes('failed') ? 'text-[tomato]' : (darkLike ? 'text-amber-200' : 'text-slate-800')}`}>
                 {cloudMsg}
               </div>
             ) : null}
@@ -510,9 +493,8 @@ export function ProfilePage({
           <button
             onClick={() => setInspectorOpen(true)}
             disabled={!authEmail}
-            className={`px-4 py-2 rounded-xl text-[13px] font-semibold shadow-sm hover:shadow transition-all ${
-              authEmail ? btnSoft : 'opacity-50 cursor-not-allowed ' + btnSoft
-            }`}
+            className={`px-4 py-2 rounded-xl text-[13px] font-semibold shadow-sm hover:shadow transition-all ${authEmail ? btnSoft : 'opacity-50 cursor-not-allowed ' + btnSoft
+              }`}
             title={authEmail ? '' : (isHinglish ? 'Login required' : 'Login required')}
           >
             {isHinglish ? 'Open Inspector' : 'Open Inspector'}
@@ -567,9 +549,8 @@ export function ProfilePage({
             return (
               <div key={tpl.id} className={`rounded-2xl p-4 ${btnSoft}`}>
                 <div className="flex items-start gap-3">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl ${
-                    isHinglish ? 'bg-indigo-500/10' : isDark ? 'bg-indigo-500/10' : 'bg-indigo-500/10'
-                  }`}>{tpl.icon}</div>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl ${isHinglish ? 'bg-indigo-500/10' : isDark ? 'bg-indigo-500/10' : 'bg-indigo-500/10'
+                    }`}>{tpl.icon}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <div>
@@ -593,9 +574,8 @@ export function ProfilePage({
                             <li key={i} className="flex items-start gap-2">
                               <span className="mt-[2px]">•</span>
                               <span className="flex-1">{q.title}</span>
-                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                                isHinglish ? 'bg-indigo-500/10 text-indigo-600' : isDark ? 'bg-white/[0.06] text-slate-300' : 'bg-slate-100 text-slate-600'
-                              }`}>+{q.xpReward} XP</span>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${darkLike ? 'bg-white/[0.06] text-slate-300' : 'bg-slate-100 text-slate-600'
+                                }`}>+{q.xpReward} XP</span>
                             </li>
                           ))}
                         </ul>
@@ -636,9 +616,8 @@ export function ProfilePage({
           <button
             onClick={() => importInputRef.current?.click()}
             disabled={!onImport}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-              onImport ? btnSoft : 'opacity-50 cursor-not-allowed ' + btnSoft
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${onImport ? btnSoft : 'opacity-50 cursor-not-allowed ' + btnSoft
+              }`}
             title={onImport ? '' : 'Import handler missing'}
           >
             <Upload size={16} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-400' : 'text-indigo-600'} />
@@ -663,10 +642,9 @@ export function ProfilePage({
 
           <button
             onClick={() => setConfirmReset(true)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-              isDark ? 'bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/15'
-                    : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all ${isDark ? 'bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/15'
+              : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
+              }`}
           >
             <RefreshCcw size={16} />
             {isHinglish ? 'Reset All Data' : 'Reset All Data'}

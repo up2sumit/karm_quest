@@ -27,23 +27,23 @@ interface ChallengesProps {
 interface Challenge {
   id: string;
   titleKey:
-    | 'challengeBrahmaMuhurta'
-    | 'challengeVidyaSeeker'
-    | 'challengeTapasyaGuard'
-    | 'challengeKarmaStorm'
-    | 'challengeRavanaSlayer'
-    | 'challengeScrollMaster'
-    | 'challengeDivyaGrind'
-    | 'challengeAsuraRush';
+  | 'challengeBrahmaMuhurta'
+  | 'challengeVidyaSeeker'
+  | 'challengeTapasyaGuard'
+  | 'challengeKarmaStorm'
+  | 'challengeRavanaSlayer'
+  | 'challengeScrollMaster'
+  | 'challengeDivyaGrind'
+  | 'challengeAsuraRush';
   descKey:
-    | 'challengeBrahmaDesc'
-    | 'challengeVidyaDesc'
-    | 'challengeTapasyaDesc'
-    | 'challengeKarmaStormDesc'
-    | 'challengeRavanaDesc'
-    | 'challengeScrollDesc'
-    | 'challengeDivyaDesc'
-    | 'challengeAsuraDesc';
+  | 'challengeBrahmaDesc'
+  | 'challengeVidyaDesc'
+  | 'challengeTapasyaDesc'
+  | 'challengeKarmaStormDesc'
+  | 'challengeRavanaDesc'
+  | 'challengeScrollDesc'
+  | 'challengeDivyaDesc'
+  | 'challengeAsuraDesc';
   reward: number;
   progress: number;
   total: number;
@@ -54,29 +54,25 @@ interface Challenge {
 export function Challenges({ stats, quests, challengeState, onClaim }: ChallengesProps) {
   const { isDark, isHinglish, isModern, lang } = useTheme();
 
+  const darkLike = isDark || isHinglish;
+
   const tp = isModern
     ? 'text-[var(--kq-text-primary)]'
-    : isHinglish
-      ? 'text-slate-800'
-      : isDark
-        ? 'text-slate-200'
-        : 'text-slate-800';
+    : darkLike
+      ? 'text-slate-200'
+      : 'text-slate-800';
 
   const ts = isModern
     ? 'text-[var(--kq-text-secondary)]'
-    : isHinglish
-      ? 'text-slate-500'
-      : isDark
-        ? 'text-slate-400'
-        : 'text-slate-500';
+    : darkLike
+      ? 'text-slate-400'
+      : 'text-slate-500';
 
   const card = isModern
     ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_0_rgba(0,0,0,0.02),0_10px_30px_rgba(0,0,0,0.06)]'
-    : isHinglish
-      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
-      : isDark
-        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-        : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+    : darkLike
+      ? 'bg-white/[0.04] backdrop-blur-xl border border-white/[0.06] shadow-sm'
+      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
 
   // Metrics derived from real app data
   const today = todayISO();
@@ -222,32 +218,25 @@ export function Challenges({ stats, quests, challengeState, onClaim }: Challenge
       {toast && (
         <div
           aria-live="polite"
-          className={`fixed left-1/2 -translate-x-1/2 bottom-5 z-[60] w-[calc(100%-2rem)] max-w-md transition-all duration-200 ${
-            toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
-          }`}
+          className={`fixed left-1/2 -translate-x-1/2 bottom-5 z-[60] w-[calc(100%-2rem)] max-w-md transition-all duration-200 ${toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+            }`}
         >
           <div
-            className={`rounded-2xl px-4 py-3 shadow-lg border ${
-              isModern
+            className={`rounded-2xl px-4 py-3 shadow-lg border ${isModern
                 ? 'bg-[var(--kq-surface)] border-[var(--kq-border)]'
-                : isHinglish
-                  ? 'bg-white/80 border-indigo-200/30 text-slate-800 backdrop-blur-xl'
-                  : isDark
-                    ? 'bg-black/40 border-white/[0.08] text-slate-100 backdrop-blur-xl'
-                    : 'bg-white/90 border-slate-200/50 text-slate-900 backdrop-blur-xl'
-            }`}
+                : darkLike
+                  ? 'bg-black/40 border-white/[0.08] text-slate-100 backdrop-blur-xl'
+                  : 'bg-white/90 border-slate-200/50 text-slate-900 backdrop-blur-xl'
+              }`}
           >
             <div className="flex items-start gap-3">
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${
-                  isModern
+                className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${isModern
                     ? 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]'
-                    : isHinglish
-                      ? 'bg-gradient-to-br from-indigo-50 to-violet-50'
-                      : isDark
-                        ? 'bg-white/[0.06]'
-                        : 'bg-slate-50'
-                }`}
+                    : darkLike
+                      ? 'bg-white/[0.06]'
+                      : 'bg-slate-50'
+                  }`}
               >
                 ✨
               </div>
@@ -257,15 +246,12 @@ export function Challenges({ stats, quests, challengeState, onClaim }: Challenge
               </div>
               <button
                 onClick={() => setToastVisible(false)}
-                className={`ml-auto text-xs px-2 py-1 rounded-lg ${
-                  isModern
+                className={`ml-auto text-xs px-2 py-1 rounded-lg ${isModern
                     ? 'text-[var(--kq-text-secondary)] hover:bg-[var(--kq-bg2)]'
-                    : isHinglish
-                      ? 'text-slate-700 hover:bg-indigo-50'
-                      : isDark
-                        ? 'text-slate-300 hover:bg-white/[0.06]'
-                        : 'text-slate-600 hover:bg-slate-100'
-                }`}
+                    : darkLike
+                      ? 'text-slate-300 hover:bg-white/[0.06]'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
                 aria-label="Dismiss"
                 title="Dismiss"
               >
@@ -285,15 +271,12 @@ export function Challenges({ stats, quests, challengeState, onClaim }: Challenge
         </div>
 
         <div
-          className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold flex items-center gap-2 ${
-            isModern
+          className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold flex items-center gap-2 ${isModern
               ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-primary)]'
-              : isHinglish
-                ? 'bg-white/70 border border-indigo-200/30 text-slate-800'
-                : isDark
-                  ? 'bg-white/[0.03] border border-white/[0.06] text-slate-200'
-                  : 'bg-white/80 border border-slate-200/40 text-slate-800'
-          }`}
+              : darkLike
+                ? 'bg-white/[0.04] border border-white/[0.06] text-slate-200'
+                : 'bg-white/80 border border-slate-200/40 text-slate-800'
+            }`}
         >
           <span className="text-sm">🪙</span>
           <span>{stats.coins}</span>
@@ -433,14 +416,12 @@ function Section({
           return (
             <div
               key={c.id}
-              className={`${card} rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                isComplete ? (isModern ? 'ring-1 ring-[var(--kq-border2)]' : isDark ? 'ring-1 ring-emerald-500/20' : 'ring-1 ring-emerald-200') : ''
-              }`}
+              className={`${card} rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${isComplete ? (isModern ? 'ring-1 ring-[var(--kq-border2)]' : isDark ? 'ring-1 ring-emerald-500/20' : 'ring-1 ring-emerald-200') : ''
+                }`}
             >
               <div className="flex items-center gap-3.5">
                 <div
-                  className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${
-                    isComplete
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${isComplete
                       ? isModern
                         ? 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]'
                         : isDark
@@ -451,7 +432,7 @@ function Section({
                         : isDark
                           ? 'bg-white/[0.03]'
                           : 'bg-slate-50'
-                  }`}
+                    }`}
                 >
                   {isComplete ? '✓' : c.emoji}
                 </div>
@@ -459,15 +440,14 @@ function Section({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h4
-                      className={`font-medium text-[13px] ${
-                        isComplete
+                      className={`font-medium text-[13px] ${isComplete
                           ? isModern
                             ? 'text-[var(--kq-text-muted)] line-through'
                             : isDark
                               ? 'text-emerald-400 line-through'
                               : 'text-emerald-600 line-through'
                           : tp
-                      }`}
+                        }`}
                     >
                       {t(c.titleKey, lang)}
                     </h4>
@@ -492,13 +472,12 @@ function Section({
 
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   <div
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg ${
-                      isModern
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg ${isModern
                         ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)]'
                         : isDark
                           ? 'bg-white/[0.03]'
                           : 'bg-slate-50'
-                    }`}
+                      }`}
                   >
                     <span className="text-sm">🪙</span>
                     <span className={`text-[13px] font-semibold ${isModern ? 'text-[var(--kq-text-primary)]' : isDark ? 'text-slate-300' : 'text-slate-700'}`}>
