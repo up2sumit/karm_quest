@@ -30,17 +30,16 @@ function moodEmoji(m: MoodValue) {
 
 export function MoodCheckIn({ completedToday }: Props) {
   const { isDark, isHinglish } = useTheme();
+  const darkLike = isDark || isHinglish;
   const { user } = useAuth();
   const { entries, todayEntry, setTodayMood, cloud } = useMoodLogUnified();
   const [expanded, setExpanded] = useState(false);
 
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const card = darkLike
+    ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
+    : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+  const tp = darkLike ? 'text-slate-200' : 'text-slate-800';
+  const ts = darkLike ? 'text-slate-400' : 'text-slate-500';
 
   const recent = useMemo(() => entries.slice(-7), [entries]);
   const maxProd = useMemo(() => Math.max(1, ...recent.map((r) => r.productivity)), [recent]);
@@ -67,9 +66,7 @@ export function MoodCheckIn({ completedToday }: Props) {
           type="button"
           onClick={() => setExpanded((v) => !v)}
           className={`text-[11px] font-semibold px-3 py-1.5 rounded-xl transition-all border ${
-            isHinglish
-              ? 'text-rose-500 border-rose-200/40 hover:bg-rose-50'
-              : isDark
+            darkLike
                 ? 'text-indigo-300 border-white/[0.08] hover:bg-white/[0.04]'
                 : 'text-indigo-600 border-slate-200 hover:bg-slate-50'
           }`}
@@ -90,7 +87,7 @@ export function MoodCheckIn({ completedToday }: Props) {
               className={`flex-1 min-w-[90px] px-3 py-2 rounded-2xl border transition-all text-left ${
                 selected
                   ? (isHinglish
-                      ? 'bg-rose-500/10 border-rose-400/40'
+                      ? 'bg-indigo-500/10 border-indigo-400/40'
                       : isDark
                         ? 'bg-indigo-500/10 border-indigo-400/30'
                         : 'bg-indigo-50 border-indigo-200')
@@ -101,7 +98,7 @@ export function MoodCheckIn({ completedToday }: Props) {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xl">{s.emoji}</span>
-                {selected ? <span className={`text-[10px] font-bold ${isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>Saved</span> : null}
+                {selected ? <span className={`text-[10px] font-bold ${isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>Saved</span> : null}
               </div>
               <div className={`text-[11px] font-semibold mt-1 ${tp}`}>{s.label}</div>
               <div className={`text-[10px] mt-0.5 ${ts}`}>{s.hint}</div>
@@ -140,7 +137,7 @@ export function MoodCheckIn({ completedToday }: Props) {
                   <div className="w-6 text-lg">{moodEmoji(r.mood)}</div>
                   <div className={`flex-1 h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
                     <div
-                      className={`${isHinglish ? 'bg-gradient-to-r from-rose-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'} h-full rounded-full`}
+                      className={`${isHinglish ? 'bg-gradient-to-r from-indigo-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'} h-full rounded-full`}
                       style={{ width: `${Math.round((r.productivity / maxProd) * 100)}%` }}
                     />
                   </div>

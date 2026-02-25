@@ -44,8 +44,8 @@ function useConfetti(isHinglish: boolean, isDark: boolean): ConfettiPiece[] {
   return useMemo(() => {
     const lightColors  = ['#6366F1', '#8B5CF6', '#A78BFA', '#F59E0B', '#10B981', '#F43F5E', '#06B6D4', '#EC4899', '#FBBF24', '#34D399'];
     const darkColors   = ['#818CF8', '#A78BFA', '#C4B5FD', '#FCD34D', '#6EE7B7', '#FB7185', '#67E8F9', '#F9A8D4', '#FDE68A', '#6EE7B7'];
-    const hinglishColors = ['#F43F5E', '#FB7185', '#E879F9', '#A855F7', '#8B5CF6', '#F59E0B', '#FBBF24', '#EC4899', '#F97316', '#EF4444'];
-    const palette = isHinglish ? hinglishColors : isDark ? darkColors : lightColors;
+    // Hinglish uses the same color composition as Charcoal Dark.
+    const palette = (isHinglish || isDark) ? darkColors : lightColors;
     const shapes: ConfettiPiece['shape'][] = ['square', 'circle', 'rect'];
 
     return [...Array(48)].map((_, i) => ({
@@ -119,6 +119,7 @@ function RippleRings({ isHinglish }: { isHinglish: boolean }) {
 
 export function LevelUpOverlay({ data, onClose }: LevelUpOverlayProps) {
   const { isDark, isHinglish, lang } = useTheme();
+  const isPro = lang === 'pro';
   const confetti = useConfetti(isHinglish, isDark);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -149,18 +150,22 @@ export function LevelUpOverlay({ data, onClose }: LevelUpOverlayProps) {
 
   // ── Copy ──────────────────────────────────────────────────────────────────
   const copy = {
-    eyebrow:      isHinglish ? '🎊 BHAI LEVEL UP HO GAYA!' : '✨ LEVEL UP!',
-    levelLabel:   isHinglish ? 'Level' : 'Level',
-    headline:     isHinglish
-                    ? `Level ${data.newLevel} ka Yoddha ban gaya tu! 🔥`
-                    : `You've reached Level ${data.newLevel}!`,
-    subtitle:     isHinglish
-                    ? 'Teri mehnat rang laayi! Keep grinding, champion!'
-                    : 'Your dedication is paying off. Keep climbing, Yoddha!',
-    xpLabel:      isHinglish ? 'XP Mila' : 'Punya Earned',
-    coinsLabel:   isHinglish ? 'Mudra Kamaye' : 'Mudras Earned',
-    achieveLabel: isHinglish ? 'Naye Trophies Mile! 🏆' : 'New Siddhis Unlocked!',
-    ctaLabel:     isHinglish ? 'Aur Quest Karo! 💪' : 'Continue Your Journey 🏹',
+    eyebrow:      isPro ? 'LEVEL UP' : (isHinglish ? '🎊 BHAI LEVEL UP HO GAYA!' : '✨ LEVEL UP!'),
+    levelLabel:   'Level',
+    headline:     isPro
+                    ? `Level ${data.newLevel}`
+                    : isHinglish
+                      ? `Level ${data.newLevel} ka Yoddha ban gaya tu! 🔥`
+                      : `You've reached Level ${data.newLevel}!`,
+    subtitle:     isPro
+                    ? 'Nice progress. Keep going.'
+                    : isHinglish
+                      ? 'Teri mehnat rang laayi! Keep grinding, champion!'
+                      : 'Your dedication is paying off. Keep climbing, Yoddha!',
+    xpLabel:      isPro ? 'XP earned' : (isHinglish ? 'XP Mila' : 'Punya Earned'),
+    coinsLabel:   isPro ? 'Coins earned' : (isHinglish ? 'Mudra Kamaye' : 'Mudras Earned'),
+    achieveLabel: isPro ? 'New milestones' : (isHinglish ? 'Naye Trophies Mile! 🏆' : 'New Siddhis Unlocked!'),
+    ctaLabel:     isPro ? 'Back to tasks' : (isHinglish ? 'Aur Quest Karo! 💪' : 'Continue Your Journey 🏹'),
   };
 
   // ── Theme colours ─────────────────────────────────────────────────────────
@@ -172,16 +177,16 @@ export function LevelUpOverlay({ data, onClose }: LevelUpOverlayProps) {
       : 'bg-gradient-to-b from-[#1A1A2E] via-[#1E1E38] to-[#16162C]';
 
   const badgeGradient = isHinglish
-    ? 'from-rose-400 via-violet-500 to-indigo-500'
+    ? 'from-indigo-400 via-violet-500 to-indigo-500'
     : 'from-indigo-400 via-violet-500 to-purple-600';
 
   const badgeRingColor = isHinglish
-    ? 'ring-rose-400/40'
+    ? 'ring-indigo-400/40'
     : 'ring-indigo-400/40';
 
-  const accentText = isHinglish ? 'text-rose-400' : 'text-indigo-400';
+  const accentText = isHinglish ? 'text-indigo-400' : 'text-indigo-400';
   const btnGradient = isHinglish
-    ? 'from-rose-500 via-violet-500 to-indigo-500'
+    ? 'from-indigo-500 via-violet-500 to-indigo-500'
     : 'from-indigo-500 via-violet-500 to-purple-600';
 
   return (

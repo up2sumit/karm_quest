@@ -26,12 +26,13 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { page: 'dashboard'    as Page, labelKey: 'navDashboard'    as const, emoji: '🪔', hi: '🏠' },
-  { page: 'quests'       as Page, labelKey: 'navQuests'       as const, emoji: '🏹', hi: '💪' },
-  { page: 'notes'        as Page, labelKey: 'navNotes'        as const, emoji: '📜', hi: '🧠' },
-  { page: 'achievements' as Page, labelKey: 'navAchievements' as const, emoji: '🏆', hi: '🏆' },
-  { page: 'challenges'   as Page, labelKey: 'navChallenges'   as const, emoji: '🔱', hi: '🔥' },
-  { page: 'shop'         as Page, labelKey: 'navShop'         as const, emoji: '🛍️', hi: '🛍️' },
+  { page: 'dashboard'    as Page, labelKey: 'navDashboard'    as const, emoji: '🪔', hi: '🏠', pro: '🗂️' },
+  { page: 'quests'       as Page, labelKey: 'navQuests'       as const, emoji: '🏹', hi: '💪', pro: '✅' },
+  { page: 'notes'        as Page, labelKey: 'navNotes'        as const, emoji: '📜', hi: '🧠', pro: '📝' },
+  { page: 'achievements' as Page, labelKey: 'navAchievements' as const, emoji: '🏆', hi: '🏆', pro: '⭐' },
+  { page: 'challenges'   as Page, labelKey: 'navChallenges'   as const, emoji: '🔱', hi: '🔥', pro: '🎯' },
+  { page: 'shop'         as Page, labelKey: 'navShop'         as const, emoji: '🛍️', hi: '🛍️', pro: '🛒' },
+  { page: 'leaderboard'  as Page, labelKey: 'navLeaderboard'  as const, emoji: '🏅', hi: '🏅', pro: '📈' },
 ];
 
 function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMobileClose, allowToggle, sidebarSkin }: {
@@ -44,7 +45,7 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
   allowToggle?: boolean;
   sidebarSkin: SidebarSkinId;
 }) {
-  const { isHinglish, lang, theme } = useTheme();
+  const { isHinglish, isModern, lang, theme } = useTheme();
   const skin = sidebarSkinClasses(sidebarSkin, theme);
   const settingsActive = currentPage === ('profile' as Page);
 
@@ -53,8 +54,8 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
       {/* Logo */}
       <div className={`flex items-center gap-3 px-5 py-5 border-b border-white/[0.06] ${!showExpanded ? 'justify-center' : ''}`}>
         <div className="relative shrink-0">
-          <span className="text-2xl">{isHinglish ? '🎉' : '🪔'}</span>
-          <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${isHinglish ? 'bg-rose-400' : skin.accent} animate-subtle-pulse`} />
+          <span className="text-2xl">{isHinglish ? '🎉' : isModern ? '🗒️' : '🪔'}</span>
+          <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${skin.accent} animate-subtle-pulse`} />
         </div>
         {showExpanded && (
           <div className="flex-1 min-w-0">
@@ -64,7 +65,7 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
         )}
         {isMobile && onMobileClose && (
           <button onClick={onMobileClose} aria-label="Close"
-            className="p-1.5 rounded-lg text-white/30 hover:text-white/70 hover:bg-white/[0.06] transition-all shrink-0">
+            className="p-1.5 rounded-lg text-white/30 hover:text-white/70 hover:bg-[var(--kq-surface)]/[0.06] transition-all shrink-0">
             <X size={18} />
           </button>
         )}
@@ -77,10 +78,10 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
           return (
             <button key={item.page} onClick={() => onNavigate(item.page)} title={t(item.labelKey, lang)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative
-                ${active ? 'bg-white/[0.08] text-white shadow-sm' : 'text-white/40 hover:bg-white/[0.04] hover:text-white/70'}
+                ${active ? 'bg-[var(--kq-surface)]/[0.08] text-white shadow-sm' : 'text-white/40 hover:bg-[var(--kq-surface)]/[0.04] hover:text-white/70'}
                 ${!showExpanded ? 'justify-center' : ''}`}>
               {active && <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full ${skin.accent}`} />}
-              <span className="text-base shrink-0">{isHinglish ? item.hi : item.emoji}</span>
+              <span className="text-base shrink-0">{isHinglish ? item.hi : isModern ? item.pro : item.emoji}</span>
               {showExpanded && <span className="font-medium text-[13px] truncate">{t(item.labelKey, lang)}</span>}
               {active && showExpanded && <div className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${skin.accent}`} />}
             </button>
@@ -94,8 +95,8 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
           onClick={() => onNavigate('profile' as Page)}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
             settingsActive
-              ? 'bg-white/[0.08] text-white shadow-sm'
-              : 'text-white/30 hover:bg-white/[0.04] hover:text-white/50'
+              ? 'bg-[var(--kq-surface)]/[0.08] text-white shadow-sm'
+              : 'text-white/30 hover:bg-[var(--kq-surface)]/[0.04] hover:text-white/50'
           } ${!showExpanded ? 'justify-center' : ''}`}
         >
           <Settings size={18} />
@@ -103,7 +104,7 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
         </button>
         {!isMobile && allowToggle && (
           <button onClick={onToggle}
-            className="w-full flex items-center justify-center py-2 rounded-lg text-white/20 hover:bg-white/[0.04] hover:text-white/40 transition-all">
+            className="w-full flex items-center justify-center py-2 rounded-lg text-white/20 hover:bg-[var(--kq-surface)]/[0.04] hover:text-white/40 transition-all">
             {showExpanded ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
           </button>
         )}
@@ -113,23 +114,22 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
 }
 
 function BottomNav({ currentPage, onNavigate }: { currentPage: Page; onNavigate: (p: Page) => void }) {
-  const { isDark, isHinglish } = useTheme();
-  const bg = isHinglish
-    ? 'bg-white/95 backdrop-blur-xl border-t border-rose-200/40'
-    : isDark ? 'bg-[#0C0C1A]/95 backdrop-blur-xl border-t border-white/[0.06]'
-             : 'bg-white/95 backdrop-blur-xl border-t border-slate-200/60';
+  const { isDark, isHinglish, isModern } = useTheme();
+  const bg = (isDark || isHinglish)
+    ? 'bg-[#0C0C1A]/95 backdrop-blur-xl border-t border-white/[0.06]'
+    : 'bg-[var(--kq-surface)]/95 backdrop-blur-xl border-t border-[var(--kq-border)]/60';
 
   return (
     <nav className={`fixed bottom-0 left-0 right-0 z-30 flex ${bg}`} aria-label="Mobile navigation">
       {navItems.map(item => {
         const active = currentPage === item.page;
-        const activeCl = isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-600';
-        const dotCl    = isHinglish ? 'bg-rose-500'   : isDark ? 'bg-indigo-400'   : 'bg-indigo-600';
+        const activeCl = isModern ? 'text-[var(--kq-primary)]' : (isDark || isHinglish) ? 'text-[var(--kq-primary)]' : 'text-[var(--kq-primary)]';
+        const dotCl    = isModern ? 'bg-[var(--kq-primary)]'   : (isDark || isHinglish) ? 'bg-indigo-400'   : 'bg-[var(--kq-primary)]';
         return (
           <button key={item.page} onClick={() => onNavigate(item.page)} aria-current={active ? 'page' : undefined}
             className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all
-              ${active ? activeCl : isDark ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400 hover:text-slate-600'}`}>
-            <span className={`text-xl transition-transform ${active ? 'scale-110' : ''}`}>{isHinglish ? item.hi : item.emoji}</span>
+              ${active ? activeCl : (isDark || isHinglish) ? 'text-[var(--kq-text-secondary)] hover:text-[var(--kq-text-muted)]' : 'text-[var(--kq-text-muted)] hover:text-[var(--kq-text-secondary)]'}`}>
+            <span className={`text-xl transition-transform ${active ? 'scale-110' : ''}`}>{isHinglish ? item.hi : isModern ? item.pro : item.emoji}</span>
             <div className={`w-1 h-1 rounded-full transition-all ${active ? dotCl : 'bg-transparent'}`} />
           </button>
         );

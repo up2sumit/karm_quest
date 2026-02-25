@@ -6,13 +6,15 @@ import type { AvatarFrameId, XpBoost } from '../shop';
 import { avatarFrameClass, boostRemainingMs, formatMs, isBoostActive } from '../shop';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { formatRelativeTime } from '../notifications';
+import { supabase } from '../lib/supabase';
 
 export type CloudBadgeStatus = {
   connected: boolean;
   saving: boolean;
   queued?: boolean;
   error?: string | null;
-  lastSyncedAt?: number | null;
+  /** ISO string from user_state.updated_at */
+  lastSyncedAt?: string | null;
 };
 
 type UserMenuProps = {
@@ -46,6 +48,7 @@ export function UserMenu({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const online = useOnlineStatus();
+  const isModern = theme === 'modern';
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -74,7 +77,7 @@ export function UserMenu({
         label: 'Guest',
         icon: <User2 size={12} />,
         cls: isHinglish
-          ? 'bg-rose-50/70 text-rose-700 border border-rose-200/40'
+          ? 'bg-indigo-50/70 text-indigo-700 border border-indigo-200/40'
           : isDark
             ? 'bg-white/[0.03] text-slate-300 border border-white/[0.06]'
             : 'bg-slate-50 text-slate-700 border border-slate-200/60',
@@ -156,27 +159,60 @@ export function UserMenu({
     };
   }, [authEmail, cloudStatus?.connected, cloudStatus?.error, cloudStatus?.queued, cloudStatus?.saving, isDark, isHinglish, online]);
 
-  const chipHover = isHinglish
-    ? 'hover:bg-white/60 hover:border-rose-200/40'
-    : isDark
-      ? 'hover:bg-white/[0.04] hover:border-white/[0.08]'
-      : 'hover:bg-white/60 hover:border-slate-200/60';
+  const chipHover = isModern
+    ? 'hover:bg-[var(--kq-primary-soft)] hover:border-[var(--kq-border2)]'
+    : isHinglish
+      ? 'hover:bg-white/60 hover:border-indigo-200/40'
+      : isDark
+        ? 'hover:bg-white/[0.04] hover:border-white/[0.08]'
+        : 'hover:bg-white/60 hover:border-slate-200/60';
 
-  const menuBg = isHinglish
-    ? 'bg-white/95 border border-rose-200/30'
-    : isDark
-      ? 'bg-[#141428] border border-white/[0.08]'
-      : 'bg-white border border-slate-200/70';
+  const menuBg = isModern
+    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)]'
+    : isHinglish
+      ? 'bg-white/95 border border-indigo-200/30'
+      : isDark
+        ? 'bg-[#141428] border border-white/[0.08]'
+        : 'bg-white border border-slate-200/70';
 
-  const label = isDark ? 'text-slate-500' : 'text-slate-500';
-  const strong = isDark ? 'text-slate-100' : 'text-slate-900';
-  const subtle = isDark ? 'text-slate-400' : 'text-slate-500';
+  const label = isModern ? 'text-[var(--kq-text-muted)]' : 'text-slate-500';
+  const strong = isModern ? 'text-[var(--kq-text-primary)]' : (isDark ? 'text-slate-100' : 'text-slate-900');
+  const subtle = isModern ? 'text-[var(--kq-text-secondary)]' : (isDark ? 'text-slate-400' : 'text-slate-500');
 
   const lastSyncText = useMemo(() => {
     const ts = cloudStatus?.lastSyncedAt;
     if (!ts) return null;
     return formatRelativeTime(new Date(ts).toISOString());
   }, [cloudStatus?.lastSyncedAt]);
+
+  const [avatarSignedUrl, setAvatarSignedUrl] = useState<string | null>(null);
+  const avatarImagePath = (stats as any).avatarImagePath as string | null | undefined;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!authEmail || !avatarImagePath) {
+        setAvatarSignedUrl(null);
+        return;
+      }
+      const { data, error } = await supabase.storage.from('attachments').createSignedUrl(avatarImagePath, 60 * 60 * 24 * 7);
+      if (cancelled) return;
+      if (error) {
+        setAvatarSignedUrl(null);
+        return;
+      }
+      setAvatarSignedUrl(data?.signedUrl ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authEmail, avatarImagePath]);
+
+  const avatarNode = avatarSignedUrl ? (
+    <img src={avatarSignedUrl} alt="Avatar" className="w-full h-full object-cover" />
+  ) : (
+    stats.avatarEmoji
+  );
 
   return (
     <div className="relative shrink-0" ref={ref}>
@@ -189,13 +225,15 @@ export function UserMenu({
         aria-label="Open user menu"
       >
         <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center text-base shadow-sm ${
-            isHinglish
-              ? 'bg-gradient-to-br from-rose-400 to-violet-400'
-              : 'bg-gradient-to-br from-indigo-500 to-violet-500'
+          className={`w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center text-base shadow-sm ${
+            isModern
+              ? 'bg-[var(--kq-primary)]'
+              : isHinglish
+                ? 'bg-gradient-to-br from-indigo-400 to-violet-400'
+                : 'bg-gradient-to-br from-indigo-500 to-violet-500'
           } ${avatarFrameClass(avatarFrame, theme)}`}
         >
-          {stats.avatarEmoji}
+          {avatarNode}
         </div>
 
         {/* Text is hidden on smaller screens for responsiveness */}
@@ -208,7 +246,7 @@ export function UserMenu({
             </span>
           </div>
           <p className={`text-[10px] mt-0.5 ${subtle}`}>
-            {isHinglish ? `Boss · Level ${stats.level}` : `Yoddha · Lvl ${stats.level}`}
+            {isModern ? `Pro · Level ${stats.level}` : (isHinglish ? `Boss · Level ${stats.level}` : `Yoddha · Lvl ${stats.level}`)}
             {boostActive ? ` · ⚡ ${xpBoost?.multiplier}× ${formatMs(boostLeft)}` : ''}
           </p>
         </div>
@@ -220,18 +258,18 @@ export function UserMenu({
       </button>
 
       {open && (
-        <div className={`absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-16px)] rounded-2xl shadow-2xl overflow-hidden animate-slide-up z-50 backdrop-blur-xl ${menuBg}`}>
+        <div className={`absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-16px)] rounded-2xl shadow-2xl overflow-hidden animate-slide-up z-50 ${isModern ? '' : 'backdrop-blur-xl'} ${menuBg}`}>
           {/* Header */}
           <div className={`px-4 py-3 border-b ${isDark ? 'border-white/[0.06]' : 'border-slate-100/80'}`}>
             <div className="flex items-start gap-3">
               <div
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm ${
+                className={`w-10 h-10 rounded-2xl overflow-hidden flex items-center justify-center text-lg shadow-sm ${
                   isHinglish
-                    ? 'bg-gradient-to-br from-rose-400 to-violet-400'
+                    ? 'bg-gradient-to-br from-indigo-400 to-violet-400'
                     : 'bg-gradient-to-br from-indigo-500 to-violet-500'
                 } ${avatarFrameClass(avatarFrame, theme)}`}
               >
-                {stats.avatarEmoji}
+                {avatarNode}
               </div>
               <div className="flex-1 min-w-0">
                 <p className={`text-[14px] font-black ${strong} truncate`}>{stats.username}</p>
@@ -277,7 +315,7 @@ export function UserMenu({
                 }}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all mb-1 ${
                   isHinglish
-                    ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                     : isDark
                       ? 'bg-[color:var(--kq-primary)] hover:brightness-110 text-black'
                       : 'bg-slate-900 hover:bg-slate-800 text-white'
@@ -300,13 +338,13 @@ export function UserMenu({
               }}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all ${
                 isHinglish
-                  ? 'hover:bg-rose-50'
+                  ? 'hover:bg-indigo-50'
                   : isDark
                     ? 'hover:bg-white/[0.04]'
                     : 'hover:bg-slate-50'
               }`}
             >
-              <Settings size={16} className={isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-300' : 'text-indigo-600'} />
+              <Settings size={16} className={isHinglish ? 'text-indigo-500' : isDark ? 'text-indigo-300' : 'text-indigo-600'} />
               <div className="flex-1">
                 <div className={`text-[13px] font-semibold ${strong}`}>Profile & Settings</div>
                 <div className={`text-[11px] ${subtle}`}>Edit username, avatar, backups & sync</div>

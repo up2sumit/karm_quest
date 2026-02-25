@@ -1,0 +1,89 @@
+/* Hinglish Theme — Professional Dark (matches Charcoal Dark composition)
+   Drop-in patch file.
+   You must ensure ONE of the selectors below matches when Hinglish theme is active.
+   Add/remove selectors as needed to match your app's theme toggling.
+*/
+
+/* === SELECTORS (edit if needed) ===
+   - body.theme-hinglish
+   - html[data-theme="hinglish"]
+   - .kq-theme-hinglish
+*/
+html[data-kq-theme="hinglish"] {
+  /* Core backgrounds */
+  --kq-bg: #0B0D18;
+  --kq-bg2: #0E1122;
+
+  /* Surfaces (cards, panels) */
+  --kq-surface: #14182A;
+  --kq-surface2: #191F35;
+
+  /* Borders & dividers */
+  --kq-border: rgba(255,255,255,0.06);
+  --kq-border2: rgba(255,255,255,0.10);
+
+  /* Text */
+  --kq-text-primary: rgba(255,255,255,0.92);
+  --kq-text-secondary: rgba(255,255,255,0.68);
+  --kq-text-muted: rgba(255,255,255,0.50);
+
+  /* Accent (single accent: purple) */
+  --kq-primary: #6D63FF;
+  --kq-primary-light: #7C73FF;
+  --kq-primary-soft: rgba(109,99,255,0.12);
+  --kq-primary-soft-border: rgba(109,99,255,0.26);
+
+  /* Status (muted, premium) */
+  --kq-success: rgba(110,231,183,0.90);
+  --kq-success-bg: rgba(110,231,183,0.10);
+  --kq-danger: rgba(248,113,113,0.90);
+  --kq-danger-bg: rgba(248,113,113,0.10);
+
+  /* Optional */
+  --kq-shadow: rgba(0,0,0,0.35);
+
+  /* Premium background glow */
+  background-color: var(--kq-bg);
+  background-image:
+    radial-gradient(circle at 18% 80%, rgba(109,99,255,0.10) 0%, transparent 55%),
+    radial-gradient(circle at 80% 18%, rgba(255,255,255,0.05) 0%, transparent 55%);
+}
+
+/* ---- Generic utility styling (safe, doesn’t remove functionality) ---- */
+
+/* Cards / panels: dark surface + subtle border + soft shadow */
+html[data-kq-theme="hinglish"] .kq-card {
+  background: var(--kq-surface);
+  border: 1px solid var(--kq-border);
+  box-shadow: 0 8px 30px var(--kq-shadow);
+}
+
+/* Pills / badges (Frame/Theme/Boost labels): neutral */
+html[data-kq-theme="hinglish"] .kq-pill {
+  background: var(--kq-surface2);
+  border: 1px solid var(--kq-border2);
+  color: var(--kq-text-muted);
+}
+
+/* Primary buttons (Buy/Equip): single accent */
+html[data-kq-theme="hinglish"] .kq-btn-primary {
+  background: var(--kq-primary);
+  color: rgba(255,255,255,0.95);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 10px 30px rgba(109,99,255,0.18);
+}
+html[data-kq-theme="hinglish"] .kq-btn-primary:hover {
+  background: var(--kq-primary-light);
+}
+
+/* Secondary buttons: outline neutral */
+html[data-kq-theme="hinglish"] .kq-btn-secondary {
+  background: transparent;
+  color: var(--kq-text-secondary);
+  border: 1px solid var(--kq-border2);
+}
+
+/* Text defaults (optional if your app already sets these) */
+html[data-kq-theme="hinglish"] {
+  color: var(--kq-text-primary);
+}

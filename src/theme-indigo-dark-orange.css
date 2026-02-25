@@ -1,0 +1,97 @@
+/**
+ * Indigo Dark (Theme 3) — Orange Accent (from reference HTML)
+ *
+ * How to use (typical options):
+ * 1) If your app uses a theme class on <body> or a root wrapper, apply one of:
+ *    - .theme-indigo-dark
+ *    - [data-theme="indigo-dark"]
+ *    - .kq-theme-indigo-dark
+ * 2) Paste this file into your src/ (or styles/) and import it once in your global CSS entry.
+ *
+ * This file sets BOTH generic tokens (--bg, --surface, --accent...) and KarmQuest-style tokens
+ * ( --kq-bg, --kq-primary, etc.) so it can be wired with minimal edits.
+ */
+
+/* --- Attach to common selectors (adjust if your app uses a different selector) --- */
+html[data-kq-theme="dark"][data-kq-skin="midnight"],
+html[data-kq-theme="hinglish"][data-kq-skin="midnight"] {
+  /* ========= Base (dark) ========= */
+  --bg: #0B0F14;
+  --surface: #0F1620;
+  --card: #111B26;
+  --border: rgba(255, 229, 200, 0.14);
+
+  --text: #EAEFF7;
+  --muted: rgba(234, 239, 247, 0.66);
+
+  /* ========= Orange accent (copied/composed from the reference HTML) ========= */
+  --accent: #FF6B00;     /* ref: --accent */
+  --accent2: #FF8C00;    /* partner for 135deg banners */
+  --warm1: rgba(255, 243, 224, 0.10); /* ref: --warm1 but dark-adapted */
+  --warm2: rgba(255, 224, 178, 0.16); /* ref: --warm2 but dark-adapted */
+
+  --c0: #2A2420;   /* dark-adapted heat ramp */
+  --c1: #FFD180;
+  --c2: #FFAB40;
+  --c3: #FF6D00;
+  --c4: #E65100;
+
+  --emerald: #00897B;
+
+  /* Soft accents for borders/glow */
+  --accent-soft: rgba(255, 107, 0, 0.10);
+  --accent-soft-border: rgba(255, 107, 0, 0.28);
+
+  /* ========= Gradients (exact composition from reference HTML) ========= */
+  --kq-bg-glow-1: radial-gradient(circle at 20% 80%, rgba(255,107,0,0.06) 0%, transparent 50%);
+  --kq-bg-glow-2: radial-gradient(circle at 80% 20%, rgba(255,171,64,0.08) 0%, transparent 50%);
+  --kq-accent-grad-135: linear-gradient(135deg, var(--accent), var(--accent2));
+  --kq-accent-grad-90: linear-gradient(90deg, #FFAB40, #FF6D00);
+
+  /* ========= KarmQuest token mapping (edit if your project uses different names) ========= */
+  --kq-bg: var(--bg);
+  --kq-bg2: var(--surface);
+  --kq-surface: var(--surface);
+  --kq-card: var(--card);
+  --kq-border: var(--border);
+
+  --kq-text-primary: var(--text);
+  --kq-text-muted: var(--muted);
+
+  --kq-primary: var(--accent);
+  --kq-primary-soft: var(--accent-soft);
+
+  --kq-accent: var(--accent);
+  --kq-accent2: var(--accent2);
+
+  /* Optional: badge / chip styling helpers */
+  --kq-chip-bg: rgba(255,107,0,0.12);
+  --kq-chip-border: rgba(255,107,0,0.26);
+}
+
+/* Optional (safe) helpers you can use in components without changing Tailwind config */
+:root.theme-indigo-dark .kq-accent-banner,
+:root[data-theme="indigo-dark"] .kq-accent-banner,
+body.theme-indigo-dark .kq-accent-banner,
+body[data-theme="indigo-dark"] .kq-accent-banner,
+.kq-theme-indigo-dark .kq-accent-banner,
+.theme-3-indigo-dark .kq-accent-banner {
+  background: var(--kq-accent-grad-135);
+  color: #fff;
+}
+
+:root.theme-indigo-dark .kq-progress-fill,
+:root[data-theme="indigo-dark"] .kq-progress-fill,
+body.theme-indigo-dark .kq-progress-fill,
+body[data-theme="indigo-dark"] .kq-progress-fill,
+.kq-theme-indigo-dark .kq-progress-fill,
+.theme-3-indigo-dark .kq-progress-fill {
+  background: var(--kq-accent-grad-90);
+}
+
+/* Suggested background application (apply to your app root container, not required) */
+html[data-kq-theme="dark"][data-kq-skin="midnight"],
+html[data-kq-theme="hinglish"][data-kq-skin="midnight"] {
+  background-color: var(--bg);
+  background-image: var(--kq-bg-glow-1), var(--kq-bg-glow-2);
+}

@@ -12,8 +12,8 @@ import {
   isBoostActive,
   boostRemainingMs,
   formatMs,
-  titleBadgeMeta,
-	  titleBadgePillClass,
+  titleBadgeMetaForTheme,
+  titleBadgePillClass,
 } from '../shop';
 
 interface MudraShopProps {
@@ -24,75 +24,121 @@ interface MudraShopProps {
   onEquipSkin: (skin: SidebarSkinId) => void;
 }
 
-function ShopItemCard({ item, owned, equipped, coins, onBuy, onEquip, kindLabel }: {
+function displayItem(item: ShopItem, isModern: boolean): ShopItem {
+  if (!isModern) return item;
+
+  const byId: Record<string, Partial<ShopItem>> = {
+    frame_gold: { name: 'Classic ring', description: 'A clean profile ring.', emoji: '⭕' },
+    frame_neon: { name: 'Indigo ring', description: 'A crisp ring with a modern edge.', emoji: '🟦' },
+    frame_lotus: { name: 'Soft ring', description: 'Warm, subtle, and calm.', emoji: '◯' },
+    frame_obsidian: { name: 'Graphite edge', description: 'Sharp and minimal.', emoji: '⬛' },
+    frame_royal: { name: 'Crest frame', description: 'A bold frame for your profile.', emoji: '◆' },
+
+    skin_lotus: { name: 'Warm Paper', description: 'Soft neutrals for focused work.', emoji: '📄' },
+
+    badge_karma_yogi: { name: 'Consistent finisher', description: 'For people who close tasks.', emoji: '✅' },
+    badge_focus_monk: { name: 'Deep focus', description: 'For distraction-free work.', emoji: '⏱️' },
+    badge_bug_slayer: { name: 'Bug fixer', description: 'For clean sprints and quick fixes.', emoji: '🧩' },
+    badge_streak_lord: { name: 'Streak builder', description: 'For steady daily momentum.', emoji: '📅' },
+    badge_vidya_guru: { name: 'Note keeper', description: 'For crisp notes and context.', emoji: '🗒️' },
+  };
+
+  const o = byId[item.id];
+  return o ? ({ ...item, ...o } as ShopItem) : item;
+}
+
+function ShopItemCard({
+  item,
+  owned,
+  equipped,
+  coins,
+  onBuy,
+  onEquip,
+  showToggle,
+  kindLabel,
+}: {
   item: ShopItem;
   owned: boolean;
   equipped: boolean;
   coins: number;
   onBuy: () => void;
   onEquip?: () => void;
+  showToggle?: boolean;
   kindLabel: string;
 }) {
-  const { isDark, isHinglish, lang } = useTheme();
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05]'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40';
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const { lang } = useTheme();
+
+  const card = 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_10px_30px_rgba(0,0,0,0.08)]';
+  const tp = 'text-[var(--kq-text-primary)]';
+  const ts = 'text-[var(--kq-text-secondary)]';
 
   const canBuy = coins >= item.cost;
+
+  const iconBox = 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]';
+  const actionBtn = 'bg-[var(--kq-primary)] text-white hover:bg-[var(--kq-primary-light)]';
+
+  const Toggle = ({ checked, disabled, onToggle }: { checked: boolean; disabled: boolean; onToggle: () => void }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onToggle}
+      className="kq-toggle"
+      title={disabled ? 'Buy to unlock' : checked ? 'Equipped' : 'Tap to equip'}
+    >
+      <span className="kq-toggle-knob" />
+    </button>
+  );
 
   return (
     <div className={`${card} rounded-2xl p-4 shadow-sm hover:shadow-md transition-all`}>
       <div className="flex items-start gap-3.5">
-        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-sm ${
-          isHinglish ? 'bg-gradient-to-br from-rose-400/15 to-violet-500/15 text-violet-600'
-          : isDark ? 'bg-white/[0.05] text-indigo-300'
-          : 'bg-indigo-50 text-indigo-600'
-        }`}>
-	          {item.emoji}
+        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-sm ${iconBox}`}>
+          {item.emoji}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className={`text-[13px] font-bold ${tp} truncate`}>{item.name}</p>
-	              <p className={`text-[11px] mt-0.5 ${ts}`}>{item.description}</p>
+              <p className={`text-[11px] mt-0.5 ${ts}`}>{item.description}</p>
             </div>
-            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold ${
-              isHinglish ? 'bg-rose-50 text-rose-600'
-              : isDark ? 'bg-white/[0.04] text-slate-400'
-              : 'bg-slate-50 text-slate-500'
-            }`}>{kindLabel}</span>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-muted)]">
+                {kindLabel}
+              </span>
+              {showToggle && (
+                <Toggle
+                  checked={equipped}
+                  disabled={!owned}
+                  onToggle={() => {
+                    if (!owned) return;
+                    if (!equipped) onEquip?.();
+                  }}
+                />
+              )}
+            </div>
           </div>
 
           <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-            <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${
-              isHinglish ? 'bg-amber-50/60 border border-amber-200/30'
-              : isDark ? 'bg-white/[0.03] border border-white/[0.05]'
-                      : 'bg-slate-50 border border-slate-200/40'
-            }`}>
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--kq-bg2)] border border-[var(--kq-border)]"
+            >
               <span className="text-sm">🪙</span>
-              <span className={`text-[12px] font-bold ${isHinglish ? 'text-amber-700' : isDark ? 'text-slate-300' : 'text-slate-700'}`}>{item.cost}</span>
+              <span className={`text-[12px] font-bold ${tp}`}>
+                {item.cost}
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
               {owned ? (
                 equipped ? (
-                  <span className={`flex items-center gap-1.5 text-[11px] font-bold ${isHinglish ? 'text-rose-600' : isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--kq-primary)]">
                     <Check size={14} /> {t('shopEquipped', lang)}
                   </span>
                 ) : (
-                  <button
-                    onClick={onEquip}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                      isHinglish
-                        ? 'bg-gradient-to-r from-rose-500 to-violet-500 text-white'
-                        : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
-                    }`}
-                  >
+                  <button onClick={onEquip} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${actionBtn}`}>
                     {t('shopEquip', lang)}
                   </button>
                 )
@@ -102,12 +148,8 @@ function ShopItemCard({ item, owned, equipped, coins, onBuy, onEquip, kindLabel 
                   disabled={!canBuy}
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
                     canBuy
-                      ? isHinglish
-                        ? 'bg-gradient-to-r from-rose-500 to-violet-500 text-white'
-                        : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
-                      : isDark
-                        ? 'bg-white/[0.03] text-slate-500 cursor-not-allowed'
-                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                      ? actionBtn
+                      : 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-muted)] cursor-not-allowed'
                   }`}
                 >
                   {!canBuy && <Lock size={12} />}
@@ -118,7 +160,9 @@ function ShopItemCard({ item, owned, equipped, coins, onBuy, onEquip, kindLabel 
           </div>
 
           {!owned && !canBuy && (
-            <p className={`mt-2 text-[10px] font-semibold ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t('shopNotEnough', lang)}</p>
+            <p className="mt-2 text-[10px] font-semibold text-[var(--kq-text-muted)]">
+              {t('shopNotEnough', lang)}
+            </p>
           )}
         </div>
       </div>
@@ -127,7 +171,7 @@ function ShopItemCard({ item, owned, equipped, coins, onBuy, onEquip, kindLabel 
 }
 
 export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: MudraShopProps) {
-  const { isDark, isHinglish, lang } = useTheme();
+  const { isModern, theme, lang } = useTheme();
 
   const [now, setNow] = useState(() => Date.now());
   const boostActive = isBoostActive(shop.activeBoost);
@@ -138,21 +182,17 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
     const tmr = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(tmr);
   }, [boostActive]);
-  // `now` is intentionally unused in JSX other than forcing rerender.
   void now;
 
-  const frames = useMemo(() => shopCatalog.filter(i => i.kind === 'frame'), []);
-  const skins = useMemo(() => shopCatalog.filter(i => i.kind === 'skin'), []);
-  const boosts = useMemo(() => shopCatalog.filter(i => i.kind === 'boost'), []);
-  const badges = useMemo(() => shopCatalog.filter(i => i.kind === 'badge'), []);
+  const frames = useMemo(() => shopCatalog.filter((i) => i.kind === 'frame').map((i) => displayItem(i, isModern)), [isModern]);
+  const skins = useMemo(() => shopCatalog.filter((i) => i.kind === 'skin').map((i) => displayItem(i, isModern)), [isModern]);
+  const boosts = useMemo(() => shopCatalog.filter((i) => i.kind === 'boost').map((i) => displayItem(i, isModern)), [isModern]);
+  const badges = useMemo(() => shopCatalog.filter((i) => i.kind === 'badge').map((i) => displayItem(i, isModern)), [isModern]);
 
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const card = 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_10px_30px_rgba(0,0,0,0.08)]';
+  const tp = 'text-[var(--kq-text-primary)]';
+  const ts = 'text-[var(--kq-text-secondary)]';
+  const iconTone = 'text-[var(--kq-primary)]';
 
   return (
     <div className="space-y-5 animate-slide-up">
@@ -178,14 +218,18 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
       {boostActive && (
         <div className={`${card} rounded-2xl p-4 flex items-center justify-between gap-4`} aria-live="polite">
           <div className="flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm ${
-              isHinglish ? 'bg-violet-500/10 text-violet-600' : isDark ? 'bg-white/[0.05] text-indigo-300' : 'bg-indigo-50 text-indigo-600'
-            }`}>
+            <div
+              className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]"
+            >
               <Sparkles size={18} />
             </div>
             <div>
-              <p className={`text-[13px] font-bold ${tp}`}>{t('shopActiveBoost', lang)} · {shop.activeBoost?.multiplier}×</p>
-              <p className={`text-[11px] ${ts}`}>Time left: <span className="font-semibold">{formatMs(boostLeft)}</span></p>
+              <p className={`text-[13px] font-bold ${tp}`}>
+                {t('shopActiveBoost', lang)} · {shop.activeBoost?.multiplier}×
+              </p>
+              <p className={`text-[11px] ${ts}`}>
+                Time left: <span className="font-semibold">{formatMs(boostLeft)}</span>
+              </p>
             </div>
           </div>
         </div>
@@ -195,12 +239,12 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
         {/* Frames */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <ShoppingBag size={16} className={isHinglish ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-500'} />
-            <h3 className={`text-[13px] font-bold ${tp}`}>Avatar Frames</h3>
+            <ShoppingBag size={16} className={iconTone} />
+            <h3 className={`text-[13px] font-bold ${tp}`}>{isModern ? 'Profile frames' : 'Avatar Frames'}</h3>
             <span className={`text-[10px] ${ts}`}>Cosmetic</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {frames.map(item => {
+            {frames.map((item) => {
               const owned = !!item.frameId && shop.ownedFrames.includes(item.frameId);
               const equipped = owned && item.frameId === shop.equippedFrame;
               return (
@@ -212,7 +256,8 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
                   coins={stats.coins}
                   onBuy={() => onBuy(item.id)}
                   onEquip={() => item.frameId && onEquipFrame(item.frameId)}
-                  kindLabel="Frame"
+                  showToggle
+                  kindLabel={isModern ? 'Frame' : 'Frame'}
                 />
               );
             })}
@@ -223,11 +268,11 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-base">🎨</span>
-            <h3 className={`text-[13px] font-bold ${tp}`}>Sidebar Themes</h3>
+            <h3 className={`text-[13px] font-bold ${tp}`}>{isModern ? 'Sidebar styles' : 'Sidebar Themes'}</h3>
             <span className={`text-[10px] ${ts}`}>Cosmetic</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {skins.map(item => {
+            {skins.map((item) => {
               const owned = !!item.skinId && shop.ownedSkins.includes(item.skinId);
               const equipped = owned && item.skinId === shop.equippedSkin;
               return (
@@ -239,7 +284,8 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
                   coins={stats.coins}
                   onBuy={() => onBuy(item.id)}
                   onEquip={() => item.skinId && onEquipSkin(item.skinId)}
-                  kindLabel="Theme"
+                  showToggle
+                  kindLabel={isModern ? 'Style' : 'Theme'}
                 />
               );
             })}
@@ -250,11 +296,11 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-base">⚡</span>
-            <h3 className={`text-[13px] font-bold ${tp}`}>XP Boosts</h3>
+            <h3 className={`text-[13px] font-bold ${tp}`}>XP boosts</h3>
             <span className={`text-[10px] ${ts}`}>Utility</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {boosts.map(item => (
+            {boosts.map((item) => (
               <ShopItemCard
                 key={item.id}
                 item={item}
@@ -262,7 +308,7 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
                 equipped={false}
                 coins={stats.coins}
                 onBuy={() => onBuy(item.id)}
-                kindLabel="Boost"
+                kindLabel={isModern ? 'Boost' : 'Boost'}
               />
             ))}
           </div>
@@ -272,41 +318,43 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-base">🏷️</span>
-            <h3 className={`text-[13px] font-bold ${tp}`}>Quest Title Badges</h3>
+            <h3 className={`text-[13px] font-bold ${tp}`}>{isModern ? 'Title badges' : 'Quest Title Badges'}</h3>
             <span className={`text-[10px] ${ts}`}>Cosmetic</span>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {badges.map(item => {
+            {badges.map((item) => {
               const owned = !!item.badgeId && shop.ownedBadges.includes(item.badgeId);
-              const meta = titleBadgeMeta(item.badgeId || '');
               const canBuy = stats.coins >= item.cost;
+              const meta = titleBadgeMetaForTheme(item.badgeId || 'none', theme);
+
               return (
                 <div key={item.id} className={`${card} rounded-2xl p-4`}>
                   <div className="flex items-start gap-3.5">
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-sm ${
-                      isHinglish ? 'bg-violet-500/10 text-violet-600' : isDark ? 'bg-white/[0.05] text-violet-300' : 'bg-violet-50 text-violet-600'
-	                    }`}>{item.emoji}</div>
+                    <div
+                      className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-sm bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]"
+                    >
+                      {item.emoji}
+                    </div>
+
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className={`text-[13px] font-bold ${tp}`}>{item.name}</p>
-                        {meta.label && (
-	                          <span className={titleBadgePillClass(meta.id, (isHinglish ? 'hinglish' : isDark ? 'dark' : 'light'))}>{meta.label}</span>
-                        )}
+                        {meta.label && <span className={titleBadgePillClass(meta.id, theme)}>{meta.emoji} {meta.label}</span>}
                       </div>
-	                      <p className={`text-[11px] mt-0.5 ${ts}`}>{item.description}</p>
+
+                      <p className={`text-[11px] mt-0.5 ${ts}`}>{item.description}</p>
 
                       <div className="mt-3 flex items-center justify-between">
-                        <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${
-                          isHinglish ? 'bg-amber-50/60 border border-amber-200/30'
-                          : isDark ? 'bg-white/[0.03] border border-white/[0.05]'
-                                  : 'bg-slate-50 border border-slate-200/40'
-                        }`}>
+                        <div
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--kq-bg2)] border border-[var(--kq-border)]"
+                        >
                           <span className="text-sm">🪙</span>
                           <span className={`text-[12px] font-bold ${tp}`}>{item.cost}</span>
                         </div>
 
                         {owned ? (
-                          <span className={`flex items-center gap-1.5 text-[11px] font-bold ${isHinglish ? 'text-rose-600' : isDark ? 'text-violet-300' : 'text-violet-600'}`}>
+                          <span className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--kq-primary)]">
                             <Check size={14} /> {t('shopOwned', lang)}
                           </span>
                         ) : (
@@ -315,12 +363,8 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
                             disabled={!canBuy}
                             className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                               canBuy
-                                ? isHinglish
-                                  ? 'bg-gradient-to-r from-rose-500 to-violet-500 text-white'
-                                  : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
-                                : isDark
-                                  ? 'bg-white/[0.03] text-slate-500 cursor-not-allowed'
-                                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                ? 'bg-[var(--kq-primary)] text-white hover:bg-[var(--kq-primary-light)]'
+                                : 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-muted)] cursor-not-allowed'
                             }`}
                           >
                             {!canBuy && <Lock size={12} className="inline-block mr-1" />}
@@ -330,7 +374,9 @@ export function MudraShop({ stats, shop, onBuy, onEquipFrame, onEquipSkin }: Mud
                       </div>
 
                       {!owned && !canBuy && (
-                        <p className={`mt-2 text-[10px] font-semibold ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t('shopNotEnough', lang)}</p>
+                        <p className="mt-2 text-[10px] font-semibold text-[var(--kq-text-muted)]">
+                          {t('shopNotEnough', lang)}
+                        </p>
                       )}
                     </div>
                   </div>

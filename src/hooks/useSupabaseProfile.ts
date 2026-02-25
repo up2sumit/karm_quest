@@ -6,12 +6,14 @@ export type UserProfile = {
   user_id: string;
   username: string;
   avatar_emoji: string;
+  /** Optional uploaded avatar image path (stored in Supabase Storage). */
+  avatar_url?: string | null;
   theme_mode: ThemeMode | null;
 };
 
 function fallbackUsernameFromEmail(email: string | null | undefined) {
-  if (!email) return "Yoddha";
-  const left = email.split("@")[0] || "Yoddha";
+  if (!email) return "User";
+  const left = email.split("@")[0] || "User";
   return left.slice(0, 16);
 }
 
@@ -32,11 +34,28 @@ export function useSupabaseProfile(userId: string | null | undefined, userEmail?
     setLoading(true);
     setError(null);
 
-    const { data, error: e } = await supabase
-      .from("profiles")
-      .select("user_id,username,avatar_emoji,theme_mode")
-      .eq("user_id", userId)
-      .maybeSingle();
+    // Some projects may not have avatar_url column yet. Try with it first; fallback if missing.
+    let data: any = null;
+    let e: any = null;
+    {
+      const res = await supabase
+        .from("profiles")
+        .select("user_id,username,avatar_emoji,avatar_url,theme_mode")
+        .eq("user_id", userId)
+        .maybeSingle();
+      data = res.data;
+      e = res.error;
+    }
+
+    if (e && typeof e.message === 'string' && e.message.toLowerCase().includes('avatar_url')) {
+      const res2 = await supabase
+        .from("profiles")
+        .select("user_id,username,avatar_emoji,theme_mode")
+        .eq("user_id", userId)
+        .maybeSingle();
+      data = res2.data;
+      e = res2.error;
+    }
 
     if (e) {
       setError(e.message);
@@ -53,11 +72,16 @@ export function useSupabaseProfile(userId: string | null | undefined, userEmail?
       );
       if (insErr) setError(insErr.message);
       // try again
-      const { data: d2 } = await supabase
-        .from("profiles")
-        .select("user_id,username,avatar_emoji,theme_mode")
-        .eq("user_id", userId)
-        .maybeSingle();
+      // Try to re-fetch with avatar_url as well.
+      let d2: any = null;
+      {
+        const r = await supabase
+          .from("profiles")
+          .select("user_id,username,avatar_emoji,avatar_url,theme_mode")
+          .eq("user_id", userId)
+          .maybeSingle();
+        d2 = r.data;
+      }
       setProfile((d2 as any) ?? null);
       setLoading(false);
       return;
@@ -72,14 +96,28 @@ export function useSupabaseProfile(userId: string | null | undefined, userEmail?
       if (!userId) return { ok: false as const, error: "No user session" };
       setError(null);
 
-      const next = { ...(profile ?? { user_id: userId, username: "Yoddha", avatar_emoji: "🧘", theme_mode: null }), ...patch };
+      const next = { ...(profile ?? { user_id: userId, username: "User", avatar_emoji: "🧘", avatar_url: null, theme_mode: null }), ...patch };
 
-      const { error: e } = await supabase
+      // Try writing avatar_url; if the column doesn't exist, fallback.
+      const up1 = await supabase
         .from("profiles")
         .upsert(
-          { user_id: userId, username: next.username, avatar_emoji: next.avatar_emoji, theme_mode: next.theme_mode },
+          { user_id: userId, username: next.username, avatar_emoji: next.avatar_emoji, avatar_url: (next as any).avatar_url ?? null, theme_mode: next.theme_mode },
           { onConflict: "user_id" }
         );
+
+      let e = up1.error;
+      if (e && typeof e.message === 'string' && e.message.toLowerCase().includes('avatar_url')) {
+        const up2 = await supabase
+          .from("profiles")
+          .upsert(
+            { user_id: userId, username: next.username, avatar_emoji: next.avatar_emoji, theme_mode: next.theme_mode },
+            { onConflict: "user_id" }
+          );
+        e = up2.error;
+        // If avatar_url isn't supported, don't keep it in local state either.
+        (next as any).avatar_url = null;
+      }
 
       if (e) {
         setError(e.message);

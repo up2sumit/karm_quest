@@ -1,8 +1,10 @@
 import { TrendingUp, Target, Zap, Trophy, ArrowRight } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { t, getQuotes } from '../i18n';
-import type { UserStats, Quest, Note, Achievement, WeeklyReport } from '../store';
+import type { Page, UserStats, Quest, Note, Achievement, WeeklyReport } from '../store';
 import { todayISO } from '../store';
+import { weekEndFromWeekStart, weekStartISO } from '../utils/recurrence';
+import { computeWeeklyQuestTarget } from '../utils/challengeTargets';
 import { useState, useEffect, useMemo } from 'react';
 import { MoodCheckIn } from './MoodCheckIn';
 import { CategoryAnalytics } from './CategoryAnalytics';
@@ -14,7 +16,8 @@ interface DashboardProps {
   quests: Quest[];
   notes: Note[];
   achievements: Achievement[];
-  onNavigate: (page: 'quests' | 'notes' | 'achievements') => void;
+  onNavigate: (page: Page) => void;
+  onNavigateTodaysKarma?: () => void;
   weeklyReport?: WeeklyReport | null;
   onDismissWeeklyReport?: (weekStart: string) => void;
   weeklyReportAutoOpen?: boolean;
@@ -40,28 +43,44 @@ export function Dashboard({
   notes,
   achievements,
   onNavigate,
+  onNavigateTodaysKarma,
   weeklyReport,
   onDismissWeeklyReport,
   weeklyReportAutoOpen,
   onWeeklyReportAutoOpenConsumed,
 }: DashboardProps) {
-  const { isDark, isHinglish, lang } = useTheme();
+  const { isDark, isHinglish, isModern, lang } = useTheme();
   const [quote, setQuote] = useState('');
   const today = todayISO();
+  const weekStart = weekStartISO();
+  const weekEnd = weekEndFromWeekStart(weekStart) || weekStart;
+
+  const completedThisWeek = useMemo(() => {
+    return quests.filter((q) => {
+      if (q.status !== 'completed') return false;
+      const d = (q.completedAt || '').trim();
+      if (!d) return false;
+      return d >= weekStart && d <= weekEnd;
+    }).length;
+  }, [quests, weekStart, weekEnd]);
+
+  const weeklyQuestTarget = useMemo(() => computeWeeklyQuestTarget(quests, weekStart), [quests, weekStart]);
   const completedToday = quests.filter(q => q.status === 'completed' && q.completedAt === today).length;
   const totalToday = quests.length;
   const progressPercent = totalToday > 0 ? Math.round((completedToday / totalToday) * 100) : 0;
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const activeQuests = quests.filter(q => q.status === 'active');
 
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const tm = isHinglish ? 'text-slate-400' : isDark ? 'text-slate-600' : 'text-slate-400';
+  const card = isModern
+    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_1px_rgba(0,0,0,0.04)]'
+    : isHinglish
+      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
+      : isDark
+        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
+        : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+  const tp = isModern ? 'text-[var(--kq-text-primary)]' : isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
+  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const tm = isModern ? 'text-[var(--kq-text-muted)]' : isHinglish ? 'text-slate-400' : isDark ? 'text-slate-600' : 'text-slate-400';
 
   useEffect(() => {
     const quotes = getQuotes(lang);
@@ -82,52 +101,60 @@ export function Dashboard({
     }))
   , []); // empty deps: fixed for the component's lifetime
 
-  const bannerGradient = isHinglish
-    ? 'bg-gradient-to-r from-rose-500/90 via-violet-500/90 to-indigo-500/90'
-    : isDark
-      ? 'bg-gradient-to-r from-indigo-600/90 via-violet-600/90 to-purple-700/90'
-      : 'bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-600';
+  const bannerGradient = isModern
+    ? 'bg-[#1E2322] border border-black/10'
+    : isHinglish
+      ? 'bg-gradient-to-r from-indigo-500/90 via-violet-500/90 to-indigo-500/90'
+      : isDark
+        ? 'bg-gradient-to-r from-indigo-600/90 via-violet-600/90 to-purple-700/90'
+        : 'bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-600';
 
   return (
     <div className="space-y-5 animate-slide-up">
       {/* Welcome Banner */}
       <div className={`relative overflow-hidden rounded-2xl p-7 text-white shadow-lg ${bannerGradient}`}>
-        <div className="absolute inset-0 opacity-[0.07]">
-          {bannerCircles.map(c => (
-            <div key={c.id} className="absolute rounded-full bg-white" style={{
-              width: `${c.size}px`, height: `${c.size}px`,
-              left: `${c.left}%`, top: `${c.top}%`,
-              opacity: c.opacity,
-            }} />
-          ))}
-        </div>
+        {!isModern && (
+          <div className="absolute inset-0 opacity-[0.07]">
+            {bannerCircles.map(c => (
+              <div key={c.id} className="absolute rounded-full bg-white" style={{
+                width: `${c.size}px`, height: `${c.size}px`,
+                left: `${c.left}%`, top: `${c.top}%`,
+                opacity: c.opacity,
+              }} />
+            ))}
+          </div>
+        )}
         <div className="relative z-10 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium mb-1 text-white/60">
-              {isHinglish ? '🤙' : '🙏'} {t('welcomeGreeting', lang)}, {stats.username}!
+              {isHinglish ? '🤙' : isModern ? '👋' : '🙏'} {t('welcomeGreeting', lang)}, {stats.username}!
             </p>
             <h2 className="text-2xl font-bold mb-1.5">{t('welcomeTitle', lang)}</h2>
             <p className="text-[13px] max-w-md text-white/50">{quote}</p>
             <button
               onClick={() => onNavigate('quests')}
-              className="mt-4 px-5 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-xl text-[13px] font-semibold transition-all border border-white/10 hover:border-white/20 flex items-center gap-2 group"
+              className={`mt-4 px-5 py-2 rounded-xl text-[13px] font-semibold transition-all flex items-center gap-2 group ${
+                isModern
+                  ? 'bg-[var(--kq-primary)] hover:bg-[var(--kq-primary-light)] border border-white/10'
+                  : 'bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/10 hover:border-white/20'
+              }`}
             >
               {t('startQuest', lang)} <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
-          <div className="text-7xl animate-float hidden md:block opacity-80">{isHinglish ? '🚀' : '🧘'}</div>
+          <div className="text-7xl animate-float hidden md:block opacity-80">{isHinglish ? '🚀' : isModern ? '🗒️' : '🧘'}</div>
         </div>
       </div>
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { icon: <Target className={isHinglish ? 'text-rose-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'} size={20} />, label: t('todaysKarma', lang), value: `${completedToday}/${totalToday}`, sub: t('questsDone', lang), emoji: '🎯' },
-          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${stats.totalXpEarned ?? stats.xp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨' },
-          { icon: <Zap className={isHinglish ? 'text-amber-400' : isDark ? 'text-amber-400' : 'text-amber-500'} size={20} />, label: t('goldMudras', lang), value: `${stats.coins}`, sub: t('keepGrinding', lang), emoji: '🪙' },
-          { icon: <Trophy className={isHinglish ? 'text-orange-400' : isDark ? 'text-orange-400' : 'text-orange-500'} size={20} />, label: t('siddhiLabel', lang), value: `${unlockedCount}/${achievements.length}`, sub: t('unlocked', lang), emoji: '🏆' },
+          { icon: <Target className={isHinglish ? 'text-indigo-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'} size={20} />, label: t('todaysKarma', lang), value: `${completedToday}/${totalToday}`, sub: t('questsDone', lang), emoji: '🎯', onClick: () => (onNavigateTodaysKarma ? onNavigateTodaysKarma() : onNavigate('quests')) },
+          { icon: <TrendingUp className={isHinglish ? 'text-violet-400' : isDark ? 'text-violet-400' : 'text-violet-500'} size={20} />, label: t('totalPunya', lang), value: `${stats.totalXpEarned ?? stats.xp}`, sub: `${t('chakraLabel', lang)} ${stats.level}`, emoji: '✨', onClick: () => onNavigate('achievements') },
+          { icon: <Zap className={isHinglish ? 'text-amber-400' : isDark ? 'text-amber-400' : 'text-amber-500'} size={20} />, label: t('goldMudras', lang), value: `${stats.coins}`, sub: t('keepGrinding', lang), emoji: '🪙', onClick: () => onNavigate('shop') },
+          { icon: <Trophy className={isHinglish ? 'text-orange-400' : isDark ? 'text-orange-400' : 'text-orange-500'} size={20} />, label: t('siddhiLabel', lang), value: `${unlockedCount}/${achievements.length}`, sub: t('unlocked', lang), emoji: '🏆', onClick: () => onNavigate('achievements') },
         ].map((item, i) => (
-          <div key={i} className={`${card} rounded-2xl p-4 hover:shadow-md transition-all duration-300 group cursor-pointer hover:-translate-y-0.5`}>
+          <div key={i} onClick={item.onClick} className={`${card} rounded-2xl p-4 hover:shadow-md transition-all duration-300 group cursor-pointer hover:-translate-y-0.5`}>
             <div className="flex items-start justify-between">
               <div>
                 <p className={`text-[11px] font-medium ${ts}`}>{item.label}</p>
@@ -179,7 +206,7 @@ export function Dashboard({
               }`}>
                 <span className="text-xs">{isHinglish ? '💪' : '🏹'}</span>
                 <span className={`text-[12px] font-medium truncate flex-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{q.title}</span>
-                <span className={`text-[10px] font-semibold ${isHinglish ? 'text-rose-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'}`}>+{q.xpReward}</span>
+                <span className={`text-[10px] font-semibold ${isHinglish ? 'text-indigo-400' : isDark ? 'text-indigo-400' : 'text-indigo-500'}`}>+{q.xpReward}</span>
               </div>
             ))}
           </div>
@@ -192,7 +219,7 @@ export function Dashboard({
               <span className="text-base">{isHinglish ? '📝' : '📜'}</span> {t('recentScrolls', lang)}
             </h3>
             <button onClick={() => onNavigate('notes')} className={`text-[11px] font-medium flex items-center gap-1 ${
-              isHinglish ? 'text-rose-400 hover:text-rose-500' : isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-500 hover:text-indigo-600'
+              isHinglish ? 'text-indigo-400 hover:text-indigo-500' : isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-500 hover:text-indigo-600'
             }`}>
               {t('viewAll', lang)} <ArrowRight size={11} />
             </button>
@@ -224,13 +251,14 @@ export function Dashboard({
             </h3>
             <div className="flex items-center gap-3">
               <div className={`text-4xl font-black bg-clip-text text-transparent ${
-                isHinglish ? 'bg-gradient-to-r from-rose-400 to-violet-400' : 'bg-gradient-to-r from-indigo-400 to-violet-400'
+                isHinglish ? 'bg-gradient-to-r from-indigo-400 to-violet-400' : 'bg-gradient-to-r from-indigo-400 to-violet-400'
               }`}>
                 {stats.streak}
               </div>
               <div>
                 <p className={`text-[13px] font-medium ${tp}`}>{t('daysOfSadhana', lang)}</p>
                 <p className={`text-[11px] ${ts}`}>{t('jaiHoYoddha', lang)}</p>
+                <p className={`text-[10px] mt-0.5 ${tm}`}>Record: {stats.streakRecord} days</p>
               </div>
             </div>
             <div className="flex gap-1 mt-3">
@@ -239,7 +267,7 @@ export function Dashboard({
                   key={i}
                   className={`flex-1 h-2 rounded-full transition-all ${
                     i < (stats.streak % 7 || (stats.streak > 0 ? 7 : 0))
-                      ? isHinglish ? 'bg-gradient-to-r from-rose-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
+                      ? isHinglish ? 'bg-gradient-to-r from-indigo-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
                       : isDark ? 'bg-white/[0.04]' : 'bg-slate-100'
                   }`}
                 />
@@ -251,7 +279,7 @@ export function Dashboard({
           {/* Weekly Boss */}
           <div className={`relative overflow-hidden rounded-2xl p-5 text-white shadow-md ${
             isHinglish
-              ? 'bg-gradient-to-br from-rose-500/90 via-violet-600/90 to-indigo-600/90'
+              ? 'bg-gradient-to-br from-indigo-500/90 via-violet-600/90 to-indigo-600/90'
               : isDark
                 ? 'bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800'
                 : 'bg-gradient-to-br from-slate-700 via-slate-600 to-slate-700'
@@ -263,10 +291,10 @@ export function Dashboard({
               <p className="text-[11px] mt-1 text-white/50">{t('ravanaDesc', lang)}</p>
               <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full transition-all ${
-                  isHinglish ? 'bg-gradient-to-r from-rose-300 to-violet-300' : 'bg-gradient-to-r from-indigo-400 to-violet-400'
-                }`} style={{ width: `${Math.min(100, (completedToday / 15) * 100)}%` }} />
+                  isHinglish ? 'bg-gradient-to-r from-indigo-300 to-violet-300' : 'bg-gradient-to-r from-indigo-400 to-violet-400'
+                }`} style={{ width: `${Math.min(100,  (completedThisWeek / weeklyQuestTarget) * 100)}%` }} />
               </div>
-              <p className="text-[10px] mt-1 text-white/40">{completedToday}/15 {t('questsLabel', lang)} · {t('rewardLabel', lang)}: 500 {isHinglish ? 'XP' : 'Punya'} + 🏆</p>
+              <p className="text-[10px] mt-1 text-white/40">{completedThisWeek}/{weeklyQuestTarget} {t('questsLabel', lang)} · {t('rewardLabel', lang)}: 500 {(lang === 'pro' || isHinglish) ? 'XP' : 'Punya'} + 🏆</p>
             </div>
           </div>
         </div>

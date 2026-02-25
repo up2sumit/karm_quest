@@ -10,7 +10,7 @@ export type AvatarFrameId = string;
 export type SidebarSkinId = string;
 export type TitleBadgeId = string;
 
-export type ThemeMode = 'light' | 'dark' | 'hinglish' | (string & {});
+export type ThemeMode = 'light' | 'dark' | 'hinglish' | 'modern' | (string & {});
 
 export type XpBoost = {
   multiplier: number;
@@ -250,17 +250,39 @@ export function getTitleBadgeMeta(id: TitleBadgeId | string | undefined | null):
   return _titleBadgeMetaMap[key] || _titleBadgeMetaMap.none;
 }
 
+
+// Theme-aware badge meta (keeps IDs stable, only changes display labels in Theme 4)
+export function titleBadgeMetaForTheme(id: TitleBadgeId | string | undefined | null, theme: ThemeMode): TitleBadgeMeta {
+  const meta = getTitleBadgeMeta(id);
+  if (theme !== 'modern') return meta;
+
+  const overrides: Record<string, Partial<TitleBadgeMeta>> = {
+    none:        { label: 'No badge', emoji: '🏷️', tone: 'slate' },
+    karma_yogi:  { label: 'Consistent finisher', emoji: '✅', tone: 'emerald' },
+    focus_monk:  { label: 'Deep focus', emoji: '⏱️', tone: 'indigo' },
+    bug_slayer:  { label: 'Bug fixer', emoji: '🧩', tone: 'rose' },
+    streak_lord: { label: 'Streak builder', emoji: '📅', tone: 'amber' },
+    vidya_guru:  { label: 'Note keeper', emoji: '🗒️', tone: 'violet' },
+  };
+
+  const o = overrides[(id || 'none') as string];
+  return o ? ({ ...meta, ...o } as TitleBadgeMeta) : meta;
+}
+
 export function titleBadgePillClass(id: TitleBadgeId | string | undefined, theme: ThemeMode): string {
   const meta = getTitleBadgeMeta(id);
-  const isDark = theme === 'dark';
-  const isH = theme === 'hinglish';
+  // Theme semantics:
+  //  - theme === 'hinglish' → Indigo Dark (true dark)
+  //  - theme === 'dark'     → Chakra Rings (light)
+  const isDark = theme === 'hinglish';
+  const isModern = theme === 'modern';
 
   // Theme base
-  const base = isH
-    ? 'border border-rose-200/60'
-    : isDark
-      ? 'border border-white/10'
-      : 'border border-slate-200/70';
+  const base = isModern
+      ? 'border border-[var(--kq-border)]'
+      : isDark
+        ? 'border border-white/10'
+        : 'border border-slate-200/70';
 
   const tone = meta.tone;
 
@@ -282,16 +304,20 @@ export function titleBadgePillClass(id: TitleBadgeId | string | undefined, theme
     violet: 'bg-violet-500/15 text-violet-200',
   };
 
-  const toneMapH: Record<string, string> = {
-    slate: 'bg-rose-50 text-rose-900',
-    indigo: 'bg-rose-50 text-rose-900',
-    rose: 'bg-rose-50 text-rose-900',
-    amber: 'bg-rose-50 text-rose-900',
-    emerald: 'bg-rose-50 text-rose-900',
-    violet: 'bg-rose-50 text-rose-900',
+  const toneMapModern: Record<string, string> = {
+    slate: 'bg-[var(--kq-bg2)] text-[var(--kq-text-primary)]',
+    indigo: 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]',
+    rose: 'bg-[var(--kq-bg2)] text-[var(--kq-primary)]',
+    amber: 'bg-[var(--kq-bg2)] text-[var(--kq-text-primary)]',
+    emerald: 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]',
+    violet: 'bg-[var(--kq-bg2)] text-[var(--kq-text-primary)]',
   };
 
-  const colors = isH ? toneMapH[tone] : isDark ? (toneMapDark[tone] || toneMapDark.slate) : (toneMapLight[tone] || toneMapLight.slate);
+  const colors = isModern
+      ? (toneMapModern[tone] || toneMapModern.slate)
+      : isDark
+        ? (toneMapDark[tone] || toneMapDark.slate)
+        : (toneMapLight[tone] || toneMapLight.slate);
 
   return `inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${base} ${colors}`;
 }
@@ -301,36 +327,33 @@ export function titleBadgePillClass(id: TitleBadgeId | string | undefined, theme
 // Named export requested by Sidebar.tsx
 export function sidebarSkinClasses(skinId: SidebarSkinId | string | undefined, theme: ThemeMode): { bg: string; accent: string } {
   const id = (skinId || 'default') as string;
-
   // Default accents per theme
   if (id === 'default') {
-    if (theme === 'hinglish') return { bg: 'bg-gradient-to-br from-rose-500/90 to-violet-600/90', accent: 'bg-rose-300' };
-    if (theme === 'dark') return { bg: 'bg-gradient-to-br from-[#0C0C1A]/95 to-[#1B1B3A]/95', accent: 'bg-indigo-500' };
+    if (theme === 'modern') return { bg: 'bg-[#1E2322]/95', accent: 'bg-[var(--kq-primary)]' };
+    // Indigo Dark (Theme 4)
+    if (theme === 'hinglish') return { bg: 'bg-gradient-to-br from-[#0C0C1A]/95 to-[#1B1B3A]/95', accent: 'bg-indigo-500' };
+    // Light themes (Saffron Light + Chakra Rings)
     return { bg: 'bg-gradient-to-br from-slate-900/95 to-indigo-900/90', accent: 'bg-indigo-400' };
   }
 
   if (id === 'midnight') {
-    return theme === 'hinglish'
-      ? { bg: 'bg-gradient-to-br from-rose-500/90 to-violet-700/90', accent: 'bg-rose-300' }
-      : { bg: 'bg-gradient-to-br from-slate-950/90 to-indigo-950/80', accent: 'bg-indigo-400' };
+    return { bg: 'bg-gradient-to-br from-slate-950/90 to-indigo-950/80', accent: 'bg-indigo-400' };
   }
 
   if (id === 'lotus') {
-    return theme === 'dark'
+    return theme === 'hinglish'
       ? { bg: 'bg-gradient-to-br from-[#1B1022]/90 to-[#2C1537]/85', accent: 'bg-fuchsia-400' }
       : { bg: 'bg-gradient-to-br from-rose-500/90 to-fuchsia-600/90', accent: 'bg-rose-200' };
   }
 
   if (id === 'sunrise') {
-    return theme === 'dark'
+    return theme === 'hinglish'
       ? { bg: 'bg-gradient-to-br from-[#1A120C]/90 to-[#2A1A0C]/85', accent: 'bg-amber-400' }
       : { bg: 'bg-gradient-to-br from-amber-500/90 to-rose-500/90', accent: 'bg-amber-200' };
   }
 
   if (id === 'obsidian') {
-    return theme === 'hinglish'
-      ? { bg: 'bg-gradient-to-br from-rose-600/90 to-slate-900/90', accent: 'bg-rose-300' }
-      : { bg: 'bg-gradient-to-br from-slate-950/90 to-slate-900/80', accent: 'bg-slate-300' };
+    return { bg: 'bg-gradient-to-br from-slate-950/90 to-slate-900/80', accent: 'bg-slate-300' };
   }
 
   // Fallback
@@ -344,7 +367,7 @@ export function avatarFrameClass(frameId: AvatarFrameId | string | undefined, th
   const id = (frameId || 'none') as string;
   if (id === 'none') return '';
 
-  const isDark = theme === 'dark';
+  const isDark = theme === 'hinglish';
 
   // A small consistent base ring that composes well with your existing UI.
   const base = 'ring-2 ring-offset-2 ring-offset-transparent';

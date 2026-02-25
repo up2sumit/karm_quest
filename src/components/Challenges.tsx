@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { t } from '../i18n';
+import { t, type Lang } from '../i18n';
 import type { Quest, UserStats } from '../store';
 import { todayISO } from '../store';
 import { weekEndFromWeekStart, weekStartISO } from '../utils/recurrence';
+import { computeWeeklyQuestTarget } from '../utils/challengeTargets';
 import { BossFightOverlay } from './BossFightOverlay';
 
 interface ChallengeState {
@@ -25,8 +26,24 @@ interface ChallengesProps {
 
 interface Challenge {
   id: string;
-  titleKey: 'challengeBrahmaMuhurta' | 'challengeVidyaSeeker' | 'challengeTapasyaGuard' | 'challengeKarmaStorm' | 'challengeRavanaSlayer' | 'challengeScrollMaster' | 'challengeDivyaGrind' | 'challengeAsuraRush';
-  descKey: 'challengeBrahmaDesc' | 'challengeVidyaDesc' | 'challengeTapasyaDesc' | 'challengeKarmaStormDesc' | 'challengeRavanaDesc' | 'challengeScrollDesc' | 'challengeDivyaDesc' | 'challengeAsuraDesc';
+  titleKey:
+    | 'challengeBrahmaMuhurta'
+    | 'challengeVidyaSeeker'
+    | 'challengeTapasyaGuard'
+    | 'challengeKarmaStorm'
+    | 'challengeRavanaSlayer'
+    | 'challengeScrollMaster'
+    | 'challengeDivyaGrind'
+    | 'challengeAsuraRush';
+  descKey:
+    | 'challengeBrahmaDesc'
+    | 'challengeVidyaDesc'
+    | 'challengeTapasyaDesc'
+    | 'challengeKarmaStormDesc'
+    | 'challengeRavanaDesc'
+    | 'challengeScrollDesc'
+    | 'challengeDivyaDesc'
+    | 'challengeAsuraDesc';
   reward: number;
   progress: number;
   total: number;
@@ -35,81 +52,102 @@ interface Challenge {
 }
 
 export function Challenges({ stats, quests, challengeState, onClaim }: ChallengesProps) {
-  const { isDark, isHinglish, lang } = useTheme();
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+  const { isDark, isHinglish, isModern, lang } = useTheme();
 
-// Metrics derived from real app data
-const today = todayISO();
-const weekStart = weekStartISO();
-const weekEnd = weekEndFromWeekStart(weekStart) || weekStart;
+  const tp = isModern
+    ? 'text-[var(--kq-text-primary)]'
+    : isHinglish
+      ? 'text-slate-800'
+      : isDark
+        ? 'text-slate-200'
+        : 'text-slate-800';
 
-const completedToday = useMemo(
-  () => quests.filter((q) => q.status === 'completed' && (q.completedAt || '') === today).length,
-  [quests, today]
-);
+  const ts = isModern
+    ? 'text-[var(--kq-text-secondary)]'
+    : isHinglish
+      ? 'text-slate-500'
+      : isDark
+        ? 'text-slate-400'
+        : 'text-slate-500';
 
-const completedThisWeek = useMemo(
-  () =>
-    quests.filter((q) => {
-      if (q.status !== 'completed') return false;
-      const d = (q.completedAt || '').trim();
-      if (!d) return false;
-      return d >= weekStart && d <= weekEnd;
-    }).length,
-  [quests, weekStart, weekEnd]
-);
+  const card = isModern
+    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_0_rgba(0,0,0,0.02),0_10px_30px_rgba(0,0,0,0.06)]'
+    : isHinglish
+      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
+      : isDark
+        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
+        : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
 
-const toughCompletedLifetime = useMemo(
-  () => quests.filter((q) => q.status === 'completed' && (q.difficulty === 'hard' || q.difficulty === 'legendary')).length,
-  [quests]
-);
+  // Metrics derived from real app data
+  const today = todayISO();
+  const weekStart = weekStartISO();
+  const weekEnd = weekEndFromWeekStart(weekStart) || weekStart;
 
-// Challenge counters (notes/focus/xp) are persisted in App state so they survive refresh.
-const dailyNotes = (challengeState?.dailyKey === today) ? (challengeState.dailyNotes || 0) : 0;
-const dailyFocus = (challengeState?.dailyKey === today) ? (challengeState.dailyFocus || 0) : 0;
-const weeklyNotes = (challengeState?.weeklyKey === weekStart) ? (challengeState.weeklyNotes || 0) : 0;
-const weeklyXp = (challengeState?.weeklyKey === weekStart) ? (challengeState.weeklyXp || 0) : 0;
-const claimed = challengeState?.claimed || {};
+  const weeklyQuestTarget = useMemo(() => computeWeeklyQuestTarget(quests, weekStart), [quests, weekStart]);
 
-const challenges: Challenge[] = useMemo(() => ([
-  // Daily
-  { id: '1', titleKey: 'challengeBrahmaMuhurta', descKey: 'challengeBrahmaDesc', reward: 30, progress: Math.min(completedToday, 3), total: 3, emoji: '🌅', type: 'daily' },
-  { id: '2', titleKey: 'challengeVidyaSeeker', descKey: 'challengeVidyaDesc', reward: 20, progress: Math.min(dailyNotes, 2), total: 2, emoji: '📖', type: 'daily' },
-  { id: '3', titleKey: 'challengeTapasyaGuard', descKey: 'challengeTapasyaDesc', reward: 15, progress: Math.min(dailyFocus, 1), total: 1, emoji: '🪔', type: 'daily' },
-  { id: '4', titleKey: 'challengeKarmaStorm', descKey: 'challengeKarmaStormDesc', reward: 50, progress: Math.min(completedToday, 5), total: 5, emoji: '⚡', type: 'daily' },
+  const completedToday = useMemo(
+    () => quests.filter((q) => q.status === 'completed' && (q.completedAt || '') === today).length,
+    [quests, today]
+  );
 
-  // Weekly
-  { id: '5', titleKey: 'challengeRavanaSlayer', descKey: 'challengeRavanaDesc', reward: 200, progress: Math.min(completedThisWeek, 15), total: 15, emoji: '🔱', type: 'weekly' },
-  { id: '6', titleKey: 'challengeScrollMaster', descKey: 'challengeScrollDesc', reward: 150, progress: Math.min(weeklyNotes, 10), total: 10, emoji: '📜', type: 'weekly' },
-  { id: '7', titleKey: 'challengeDivyaGrind', descKey: 'challengeDivyaDesc', reward: 300, progress: Math.min(weeklyXp, 500), total: 500, emoji: '💎', type: 'weekly' },
+  const completedThisWeek = useMemo(
+    () =>
+      quests.filter((q) => {
+        if (q.status !== 'completed') return false;
+        const d = (q.completedAt || '').trim();
+        if (!d) return false;
+        return d >= weekStart && d <= weekEnd;
+      }).length,
+    [quests, weekStart, weekEnd]
+  );
 
-  // Special
-  { id: '8', titleKey: 'challengeAsuraRush', descKey: 'challengeAsuraDesc', reward: 250, progress: Math.min(toughCompletedLifetime, 3), total: 3, emoji: '👑', type: 'special' },
-]), [completedToday, dailyNotes, dailyFocus, completedThisWeek, weeklyNotes, weeklyXp, toughCompletedLifetime]);
+  const toughCompletedLifetime = useMemo(
+    () => quests.filter((q) => q.status === 'completed' && (q.difficulty === 'hard' || q.difficulty === 'legendary')).length,
+    [quests]
+  );
 
+  // Challenge counters (notes/focus/xp) are persisted in App state so they survive refresh.
+  const dailyNotes = challengeState?.dailyKey === today ? (challengeState.dailyNotes || 0) : 0;
+  const dailyFocus = challengeState?.dailyKey === today ? (challengeState.dailyFocus || 0) : 0;
+  const weeklyNotes = challengeState?.weeklyKey === weekStart ? (challengeState.weeklyNotes || 0) : 0;
+  const weeklyXp = challengeState?.weeklyKey === weekStart ? (challengeState.weeklyXp || 0) : 0;
+  const claimed = challengeState?.claimed || {};
 
-  // ── Boss Fight trigger (Weekly Ravana) ────────────────────────────────
-  const ravana = useMemo(() => challenges.find(c => c.titleKey === 'challengeRavanaSlayer'), [challenges]);
+  const challenges: Challenge[] = useMemo(() => {
+    const e = (fallback: string, modern: string) => (isModern ? modern : fallback);
+    return [
+      // Daily
+      { id: '1', titleKey: 'challengeBrahmaMuhurta', descKey: 'challengeBrahmaDesc', reward: 30, progress: Math.min(completedToday, 3), total: 3, emoji: e('🌅', '🌤️'), type: 'daily' },
+      { id: '2', titleKey: 'challengeVidyaSeeker', descKey: 'challengeVidyaDesc', reward: 20, progress: Math.min(dailyNotes, 2), total: 2, emoji: e('📖', '🗒️'), type: 'daily' },
+      { id: '3', titleKey: 'challengeTapasyaGuard', descKey: 'challengeTapasyaDesc', reward: 15, progress: Math.min(dailyFocus, 1), total: 1, emoji: e('🪔', '⏱️'), type: 'daily' },
+      { id: '4', titleKey: 'challengeKarmaStorm', descKey: 'challengeKarmaStormDesc', reward: 50, progress: Math.min(completedToday, 5), total: 5, emoji: e('⚡', '✅'), type: 'daily' },
+
+      // Weekly
+      { id: '5', titleKey: 'challengeRavanaSlayer', descKey: 'challengeRavanaDesc', reward: 200, progress: Math.min(completedThisWeek, weeklyQuestTarget), total: weeklyQuestTarget, emoji: e('🔱', '📅'), type: 'weekly' },
+      { id: '6', titleKey: 'challengeScrollMaster', descKey: 'challengeScrollDesc', reward: 150, progress: Math.min(weeklyNotes, 10), total: 10, emoji: e('📜', '🗂️'), type: 'weekly' },
+      { id: '7', titleKey: 'challengeDivyaGrind', descKey: 'challengeDivyaDesc', reward: 300, progress: Math.min(weeklyXp, 500), total: 500, emoji: e('💎', '📈'), type: 'weekly' },
+
+      // Special
+      { id: '8', titleKey: 'challengeAsuraRush', descKey: 'challengeAsuraDesc', reward: 250, progress: Math.min(toughCompletedLifetime, 3), total: 3, emoji: e('👑', '🧩'), type: 'special' },
+    ];
+  }, [completedToday, dailyNotes, dailyFocus, completedThisWeek, weeklyNotes, weeklyXp, toughCompletedLifetime, weeklyQuestTarget, isModern]);
+
+  // ── Boss Fight trigger (Weekly milestone celebration) ─────────────────
+  const ravana = useMemo(() => challenges.find((c) => c.titleKey === 'challengeRavanaSlayer'), [challenges]);
   const ravanaIsComplete = Boolean(ravana && ravana.progress >= ravana.total);
   const [bossFightOpen, setBossFightOpen] = useState(false);
 
   useEffect(() => {
     if (!ravanaIsComplete) return;
 
-    // Trigger once per ISO week (so it feels like a weekly boss celebration).
+    // Trigger once per ISO week
     const weekKey = getISOWeekKey(new Date());
-    const triggerKey = `${weekKey}:ravana:15`;
+    const triggerKey = `${weekKey}:ravana:${ravana?.total ?? weeklyQuestTarget}`;
     const storageKey = 'karmquest:bossfight:lastTrigger';
     const last = localStorage.getItem(storageKey);
     if (last === triggerKey) return;
 
-    // Auto-award the Ravana reward when the boss fight triggers (prevents "shown but not granted").
+    // Auto-award the weekly reward when the celebration triggers
     if (ravana && !claimed[ravana.id]) {
       onClaim(ravana.id, ravana.reward);
       showClaimToast(ravana.reward);
@@ -120,21 +158,30 @@ const challenges: Challenge[] = useMemo(() => ([
   }, [ravanaIsComplete, ravana, claimed, onClaim]);
 
   const [untilMidnight, setUntilMidnight] = useState(timeUntilLocalMidnight());
+  const hh = String(untilMidnight.h).padStart(2, '0');
+  const mm = String(untilMidnight.m).padStart(2, '0');
+  const ss = String((untilMidnight as any).s ?? 0).padStart(2, '0');
 
-  const hh = String(untilMidnight.h).padStart(2, "0");
-  const mm = String(untilMidnight.m).padStart(2, "0");
-  const ss = String((untilMidnight as any).s ?? 0).padStart(2, "0");
-
-  // ── Claim toast (mini reward feedback) ───────────────────────────────
+  // ── Claim toast ─────────────────────────────────────────────────────
   const [toast, setToast] = useState<null | { title: string; subtitle?: string }>(null);
   const [toastVisible, setToastVisible] = useState(false);
 
   const showClaimToast = (reward: number) => {
-    const title = isHinglish ? `Shabaash! +${reward} Mudra 🪙` : `Reward claimed! +${reward} 🪙`;
-    const subtitle = isHinglish ? 'Karm points wallet updated.' : 'Coins added to your wallet.';
+    const coinWord = lang === 'pro' ? 'coins' : 'Mudra';
+    const title = isModern
+      ? `Reward claimed · +${reward} coins`
+      : isHinglish
+        ? `Shabaash! +${reward} Mudra 🪙`
+        : `Reward claimed! +${reward} 🪙`;
+
+    const subtitle = isModern
+      ? 'Added to your wallet.'
+      : isHinglish
+        ? 'Karm points wallet updated.'
+        : `Added to your ${coinWord} wallet.`;
+
     setToast({ title, subtitle });
     setToastVisible(false);
-    // next tick so transitions always run
     requestAnimationFrame(() => setToastVisible(true));
   };
 
@@ -147,7 +194,6 @@ const challenges: Challenge[] = useMemo(() => ([
   useEffect(() => {
     if (!toast) return;
     if (toastVisible) return;
-    // give exit animation a moment, then unmount
     const id = window.setTimeout(() => setToast(null), 260);
     return () => window.clearTimeout(id);
   }, [toast, toastVisible]);
@@ -164,17 +210,13 @@ const challenges: Challenge[] = useMemo(() => ([
     return () => window.clearInterval(id);
   }, []);
 
-  const daily = challenges.filter(c => c.type === 'daily');
-  const weekly = challenges.filter(c => c.type === 'weekly');
-  const special = challenges.filter(c => c.type === 'special');
+  const daily = challenges.filter((c) => c.type === 'daily');
+  const weekly = challenges.filter((c) => c.type === 'weekly');
+  const special = challenges.filter((c) => c.type === 'special');
 
   return (
     <div className="space-y-5 animate-slide-up">
-      <BossFightOverlay
-        open={bossFightOpen}
-        onClose={() => setBossFightOpen(false)}
-        rewardCoins={ravana?.reward ?? 200}
-      />
+      <BossFightOverlay open={bossFightOpen} onClose={() => setBossFightOpen(false)} rewardCoins={ravana?.reward ?? 200} />
 
       {/* Claim Toast */}
       {toast && (
@@ -185,22 +227,26 @@ const challenges: Challenge[] = useMemo(() => ([
           }`}
         >
           <div
-            className={`rounded-2xl px-4 py-3 shadow-lg border backdrop-blur-xl ${
-              isHinglish
-                ? 'bg-white/80 border-rose-200/30 text-slate-800'
-                : isDark
-                  ? 'bg-black/40 border-white/[0.08] text-slate-100'
-                  : 'bg-white/90 border-slate-200/50 text-slate-900'
+            className={`rounded-2xl px-4 py-3 shadow-lg border ${
+              isModern
+                ? 'bg-[var(--kq-surface)] border-[var(--kq-border)]'
+                : isHinglish
+                  ? 'bg-white/80 border-indigo-200/30 text-slate-800 backdrop-blur-xl'
+                  : isDark
+                    ? 'bg-black/40 border-white/[0.08] text-slate-100 backdrop-blur-xl'
+                    : 'bg-white/90 border-slate-200/50 text-slate-900 backdrop-blur-xl'
             }`}
           >
             <div className="flex items-start gap-3">
               <div
                 className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${
-                  isHinglish
-                    ? 'bg-gradient-to-br from-rose-50 to-violet-50'
-                    : isDark
-                      ? 'bg-white/[0.06]'
-                      : 'bg-slate-50'
+                  isModern
+                    ? 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]'
+                    : isHinglish
+                      ? 'bg-gradient-to-br from-indigo-50 to-violet-50'
+                      : isDark
+                        ? 'bg-white/[0.06]'
+                        : 'bg-slate-50'
                 }`}
               >
                 ✨
@@ -212,11 +258,13 @@ const challenges: Challenge[] = useMemo(() => ([
               <button
                 onClick={() => setToastVisible(false)}
                 className={`ml-auto text-xs px-2 py-1 rounded-lg ${
-                  isHinglish
-                    ? 'text-slate-700 hover:bg-rose-50'
-                    : isDark
-                      ? 'text-slate-300 hover:bg-white/[0.06]'
-                      : 'text-slate-600 hover:bg-slate-100'
+                  isModern
+                    ? 'text-[var(--kq-text-secondary)] hover:bg-[var(--kq-bg2)]'
+                    : isHinglish
+                      ? 'text-slate-700 hover:bg-indigo-50'
+                      : isDark
+                        ? 'text-slate-300 hover:bg-white/[0.06]'
+                        : 'text-slate-600 hover:bg-slate-100'
                 }`}
                 aria-label="Dismiss"
                 title="Dismiss"
@@ -227,25 +275,30 @@ const challenges: Challenge[] = useMemo(() => ([
           </div>
         </div>
       )}
-<div className="flex items-start justify-between gap-4">
-  <div>
-    <h2 className={`text-xl font-bold ${tp} flex items-center gap-2.5`}>
-      <span className="text-2xl">{isHinglish ? '🔥' : '🔱'}</span> {t('challengesTitle', lang)}
-    </h2>
-    <p className={`text-[13px] mt-0.5 ${ts}`}>{t('challengesSub', lang)}</p>
-  </div>
 
-  <div className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold flex items-center gap-2 ${
-    isHinglish
-      ? 'bg-white/70 border border-rose-200/30 text-slate-800'
-      : isDark
-        ? 'bg-white/[0.03] border border-white/[0.06] text-slate-200'
-        : 'bg-white/80 border border-slate-200/40 text-slate-800'
-  }`}>
-    <span className="text-sm">🪙</span>
-    <span>{stats.coins}</span>
-  </div>
-</div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className={`text-xl font-bold ${tp} flex items-center gap-2.5`}>
+            <span className="text-2xl">{isModern ? '🎯' : isHinglish ? '🔥' : '🔱'}</span> {t('challengesTitle', lang)}
+          </h2>
+          <p className={`text-[13px] mt-0.5 ${ts}`}>{t('challengesSub', lang)}</p>
+        </div>
+
+        <div
+          className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold flex items-center gap-2 ${
+            isModern
+              ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-primary)]'
+              : isHinglish
+                ? 'bg-white/70 border border-indigo-200/30 text-slate-800'
+                : isDark
+                  ? 'bg-white/[0.03] border border-white/[0.06] text-slate-200'
+                  : 'bg-white/80 border border-slate-200/40 text-slate-800'
+          }`}
+        >
+          <span className="text-sm">🪙</span>
+          <span>{stats.coins}</span>
+        </div>
+      </div>
 
       <div className={`${card} rounded-2xl p-4 flex items-center justify-between`}>
         <div className="flex items-center gap-2.5">
@@ -257,13 +310,49 @@ const challenges: Challenge[] = useMemo(() => ([
         </div>
         <div className="text-right">
           <p className={`text-base font-bold ${tp}`}>{hh}:{mm}:{ss}</p>
-          <p className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t('untilReset', lang)}</p>
+          <p className={`text-[10px] ${isModern ? 'text-[var(--kq-text-muted)]' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t('untilReset', lang)}</p>
         </div>
       </div>
 
-      <Section title={t('dailyKarma', lang)} challenges={daily} claimed={claimed} onClaim={handleClaim} isDark={isDark} isHinglish={isHinglish} lang={lang} card={card} tp={tp} ts={ts} />
-      <Section title={t('weeklyCampaigns', lang)} challenges={weekly} claimed={claimed} onClaim={handleClaim} isDark={isDark} isHinglish={isHinglish} lang={lang} card={card} tp={tp} ts={ts} />
-      <Section title={t('specialMissions', lang)} challenges={special} claimed={claimed} onClaim={handleClaim} isDark={isDark} isHinglish={isHinglish} lang={lang} card={card} tp={tp} ts={ts} />
+      <Section
+        title={t('dailyKarma', lang)}
+        challenges={daily}
+        claimed={claimed}
+        onClaim={handleClaim}
+        isDark={isDark}
+        isHinglish={isHinglish}
+        isModern={isModern}
+        lang={lang}
+        card={card}
+        tp={tp}
+        ts={ts}
+      />
+      <Section
+        title={t('weeklyCampaigns', lang)}
+        challenges={weekly}
+        claimed={claimed}
+        onClaim={handleClaim}
+        isDark={isDark}
+        isHinglish={isHinglish}
+        isModern={isModern}
+        lang={lang}
+        card={card}
+        tp={tp}
+        ts={ts}
+      />
+      <Section
+        title={t('specialMissions', lang)}
+        challenges={special}
+        claimed={claimed}
+        onClaim={handleClaim}
+        isDark={isDark}
+        isHinglish={isHinglish}
+        isModern={isModern}
+        lang={lang}
+        card={card}
+        tp={tp}
+        ts={ts}
+      />
     </div>
   );
 }
@@ -290,8 +379,30 @@ function getISOWeekKey(date: Date) {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
-function Section({ title, challenges, claimed, onClaim, isDark, isHinglish, lang, card, tp, ts }: {
-  title: string; challenges: Challenge[]; claimed: Record<string, boolean>; onClaim: (challengeId: string, reward: number) => void; isDark: boolean; isHinglish: boolean; lang: 'en' | 'hi'; card: string; tp: string; ts: string;
+function Section({
+  title,
+  challenges,
+  claimed,
+  onClaim,
+  isDark,
+  isHinglish,
+  isModern,
+  lang,
+  card,
+  tp,
+  ts,
+}: {
+  title: string;
+  challenges: Challenge[];
+  claimed: Record<string, boolean>;
+  onClaim: (challengeId: string, reward: number) => void;
+  isDark: boolean;
+  isHinglish: boolean;
+  isModern: boolean;
+  lang: Lang;
+  card: string;
+  tp: string;
+  ts: string;
 }) {
   return (
     <div>
@@ -301,66 +412,113 @@ function Section({ title, challenges, claimed, onClaim, isDark, isHinglish, lang
           const percent = Math.min(100, Math.round((c.progress / c.total) * 100));
           const isComplete = c.progress >= c.total;
           const isClaimed = !!claimed[c.id];
+
+          const track = isModern ? 'bg-[var(--kq-bg2)]' : isDark ? 'bg-white/[0.04]' : 'bg-slate-100';
+          const fill = isModern
+            ? 'bg-[var(--kq-primary)]'
+            : isComplete
+              ? 'bg-emerald-400'
+              : isHinglish
+                ? 'bg-gradient-to-r from-indigo-400 to-violet-400'
+                : 'bg-gradient-to-r from-indigo-500 to-violet-500';
+
+          const claimBtn = isModern
+            ? 'bg-[var(--kq-primary)] text-white hover:bg-[var(--kq-primary-light)]'
+            : isHinglish
+              ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
+              : isDark
+                ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100';
+
           return (
-            <div key={c.id}
+            <div
+              key={c.id}
               className={`${card} rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                isComplete ? isDark ? 'ring-1 ring-emerald-500/20' : 'ring-1 ring-emerald-200' : ''
+                isComplete ? (isModern ? 'ring-1 ring-[var(--kq-border2)]' : isDark ? 'ring-1 ring-emerald-500/20' : 'ring-1 ring-emerald-200') : ''
               }`}
             >
               <div className="flex items-center gap-3.5">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${
-                  isComplete
-                    ? isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'
-                    : isDark ? 'bg-white/[0.03]' : 'bg-slate-50'
-                }`}>
-                  {isComplete ? '✅' : c.emoji}
+                <div
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+                    isComplete
+                      ? isModern
+                        ? 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]'
+                        : isDark
+                          ? 'bg-emerald-500/10'
+                          : 'bg-emerald-50'
+                      : isModern
+                        ? 'bg-[var(--kq-bg2)] text-[var(--kq-text-primary)]'
+                        : isDark
+                          ? 'bg-white/[0.03]'
+                          : 'bg-slate-50'
+                  }`}
+                >
+                  {isComplete ? '✓' : c.emoji}
                 </div>
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h4 className={`font-medium text-[13px] ${
-                      isComplete ? isDark ? 'text-emerald-400 line-through' : 'text-emerald-600 line-through' : tp
-                    }`}>{t(c.titleKey, lang)}</h4>
-                    {isComplete && <span className={`text-[11px] font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-500'}`}>{t('jaiHo', lang)}</span>}
-                  </div>
-                  <p className={`text-[11px] mt-0.5 ${ts}`}>{t(c.descKey, lang)}</p>
-                  <div className="mt-2 flex items-center gap-2.5">
-                    <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
-                      <div className={`h-full rounded-full transition-all duration-700 ${
+                    <h4
+                      className={`font-medium text-[13px] ${
                         isComplete
-                          ? 'bg-emerald-400'
-                          : isHinglish ? 'bg-gradient-to-r from-rose-400 to-violet-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
-                      }`} style={{ width: `${percent}%` }} />
+                          ? isModern
+                            ? 'text-[var(--kq-text-muted)] line-through'
+                            : isDark
+                              ? 'text-emerald-400 line-through'
+                              : 'text-emerald-600 line-through'
+                          : tp
+                      }`}
+                    >
+                      {t(c.titleKey, lang)}
+                    </h4>
+                    {isComplete && (
+                      <span className={`text-[11px] font-semibold ${isModern ? 'text-[var(--kq-text-secondary)]' : isDark ? 'text-emerald-400' : 'text-emerald-500'}`}>
+                        {t('jaiHo', lang)}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className={`text-[11px] mt-0.5 ${ts}`}>{t(c.descKey, lang)}</p>
+
+                  <div className="mt-2 flex items-center gap-2.5">
+                    <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${track}`}>
+                      <div className={`h-full rounded-full transition-all duration-700 ${fill}`} style={{ width: `${percent}%` }} />
                     </div>
-                    <span className={`text-[10px] font-semibold shrink-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{c.progress}/{c.total}</span>
+                    <span className={`text-[10px] font-semibold shrink-0 ${isModern ? 'text-[var(--kq-text-muted)]' : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {c.progress}/{c.total}
+                    </span>
                   </div>
                 </div>
-<div className="flex flex-col items-end gap-2 shrink-0">
-  <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg ${
-    isDark ? 'bg-white/[0.03]' : 'bg-slate-50'
-  }`}>
-    <span className="text-sm">🪙</span>
-    <span className={`text-[13px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>+{c.reward}</span>
-  </div>
 
-  {isComplete && !isClaimed ? (
-    <button
-      onClick={() => onClaim(c.id, c.reward)}
-      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all active:scale-[0.98] ${
-        isHinglish
-          ? 'bg-gradient-to-r from-rose-500 to-violet-500 text-white'
-          : isDark
-            ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20'
-            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-      }`}
-    >
-      {isHinglish ? 'Claim' : 'Claim'}
-    </button>
-  ) : isClaimed ? (
-    <span className={`text-[11px] font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-      {isHinglish ? 'Claimed' : 'Claimed'}
-    </span>
-  ) : null}
-</div>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <div
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg ${
+                      isModern
+                        ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)]'
+                        : isDark
+                          ? 'bg-white/[0.03]'
+                          : 'bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-sm">🪙</span>
+                    <span className={`text-[13px] font-semibold ${isModern ? 'text-[var(--kq-text-primary)]' : isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                      +{c.reward}
+                    </span>
+                  </div>
+
+                  {isComplete && !isClaimed ? (
+                    <button
+                      onClick={() => onClaim(c.id, c.reward)}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all active:scale-[0.98] ${claimBtn}`}
+                    >
+                      Claim
+                    </button>
+                  ) : isClaimed ? (
+                    <span className={`text-[11px] font-semibold ${isModern ? 'text-[var(--kq-text-secondary)]' : isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                      Claimed
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </div>
           );

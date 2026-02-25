@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import type { Quest } from '../store';
@@ -32,6 +32,41 @@ function moodEmoji(v: MoodValue | null | undefined) {
   return v === 1 ? '😫' : v === 2 ? '😕' : v === 3 ? '😐' : v === 4 ? '🙂' : '😄';
 }
 
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+
+function fmtDateShort(d: Date) {
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+function fmtDateLong(d: Date) {
+  return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function bestStreakFromCounts(counts: number[]) {
+  let best = 0;
+  let run = 0;
+  for (const c of counts) {
+    if (c > 0) {
+      run += 1;
+      best = Math.max(best, run);
+    } else {
+      run = 0;
+    }
+  }
+  return best;
+}
+
+function currentStreakFromCounts(counts: number[]) {
+  let s = 0;
+  for (let i = counts.length - 1; i >= 0; i--) {
+    if (counts[i] > 0) s += 1;
+    else break;
+  }
+  return s;
+}
+
 // GitHub-ish thresholds requested:
 // 0 = grey, 1-5 = yellow, 6-10 = green, 11+ = dark green
 function levelForCount(count: number): 0 | 1 | 2 | 3 {
@@ -41,11 +76,516 @@ function levelForCount(count: number): 0 | 1 | 2 | 3 {
   return 3;
 }
 
+type HeatMode = 'constellation' | 'orbit' | 'grid';
+
+type DayDatum = {
+  iso: string;
+  date: Date;
+  count: number;
+  xp: number;
+  mood: MoodEntry | null;
+  lvl: 0 | 1 | 2 | 3;
+};
+
+function starRadius(count: number) {
+  if (count <= 0) return 2.4;
+  if (count <= 5) return 4.6;
+  if (count <= 10) return 7.2;
+  return 9.5;
+}
+
+function starRGBA(lvl: 0 | 1 | 2 | 3) {
+  // tuned for cosmic look but preserves the same semantic thresholds (0 / 1–5 / 6–10 / 11+)
+  if (lvl === 0) return { r: 148, g: 163, b: 184, a: 0.22 }; // slate-400
+  if (lvl === 1) return { r: 250, g: 204, b: 21, a: 0.75 }; // amber-ish
+  if (lvl === 2) return { r: 52, g: 211, b: 153, a: 0.8 }; // emerald-400
+  return { r: 16, g: 185, b: 129, a: 0.95 }; // emerald-500
+}
+
+function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function drawStarfield(ctx: CanvasRenderingContext2D, w: number, h: number, seed: number) {
+  // deterministic-ish: same background per session for less flicker
+  const count = 48;
+  ctx.fillStyle = 'rgba(226,232,240,0.10)';
+  for (let i = 0; i < count; i++) {
+    const t = (i + 1) * 137.5 + seed * 17.3;
+    const bx = (Math.sin((t * Math.PI) / 180) * 0.52 + 0.5) * w;
+    const by = (Math.cos((t * 0.71 * Math.PI) / 180) * 0.42 + 0.52) * h;
+    const rr = 0.7 + ((i + seed) % 5) * 0.12;
+    ctx.beginPath();
+    ctx.arc(bx, by, rr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function monthTicksForDays(days: DayDatum[]) {
+  const items: Array<{ label: string; start: number }> = [];
+  let lastM = -1;
+  for (let i = 0; i < days.length; i++) {
+    const m = days[i].date.getMonth();
+    if (m !== lastM) {
+      items.push({ label: days[i].date.toLocaleDateString(undefined, { month: 'short' }), start: i });
+      lastM = m;
+    }
+  }
+  return items;
+}
+
+function useCanvasSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(() => {
+      setW(el.clientWidth || 0);
+    });
+    ro.observe(el);
+    setW(el.clientWidth || 0);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, w } as const;
+}
+
+function ConstellationCanvas(props: {
+  days: DayDatum[];
+  isDark: boolean;
+  selectedISO: string | null;
+  onSelectISO: (iso: string) => void;
+  onHoverISO: (iso: string | null) => void;
+}) {
+  const { days, isDark, selectedISO, onSelectISO, onHoverISO } = props;
+  const wrap = useCanvasSize<HTMLDivElement>();
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Store positions so hover detection is stable between renders
+  const posRef = useRef<Array<{ x: number; y: number; iso: string; idx: number }>>([]);
+  const hoverIdxRef = useRef<number>(-1);
+
+  const height = 210;
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+
+  const draw = () => {
+    const canvas = canvasRef.current;
+    const w = wrap.w;
+    if (!canvas || !w) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${height}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Background
+    const bg = ctx.createLinearGradient(0, 0, w, height);
+    bg.addColorStop(0, isDark ? 'rgba(2, 6, 23, 0.9)' : 'rgba(2, 6, 23, 0.92)');
+    bg.addColorStop(1, isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(15, 23, 42, 0.9)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, height);
+    drawStarfield(ctx, w, height, days.length);
+
+    const PAD = 18;
+    const n = Math.max(1, days.length);
+    const xStep = n === 1 ? 0 : (w - PAD * 2) / (n - 1);
+
+    const positions: Array<{ x: number; y: number; iso: string; idx: number }> = [];
+    for (let i = 0; i < n; i++) {
+      const d = days[i];
+      const x = PAD + i * xStep;
+      const baseY = height * 0.62;
+      const noise = Math.sin(i * 0.72) * 16 + Math.cos(i * 1.31) * 12;
+      const lift = d.count > 0 ? -Math.min(55, d.count * 4.6) : 0;
+      const y = clamp(baseY + noise + lift, 26, height - 26);
+      positions.push({ x, y, iso: d.iso, idx: i });
+    }
+    posRef.current = positions;
+
+    // Streak connections (active consecutive days)
+    for (let i = 1; i < days.length; i++) {
+      if (days[i].count > 0 && days[i - 1].count > 0) {
+        const p1 = positions[i - 1];
+        const p2 = positions[i];
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+        ctx.lineWidth = 1.35;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+
+    const hoverIdx = hoverIdxRef.current;
+    const todayISO = days[days.length - 1]?.iso;
+
+    // Stars
+    for (let i = 0; i < days.length; i++) {
+      const d = days[i];
+      const p = positions[i];
+      const r = starRadius(d.count);
+      const c = starRGBA(d.lvl);
+      const isHover = hoverIdx === i;
+      const isSelected = selectedISO === d.iso;
+      const isToday = todayISO === d.iso;
+
+      // glow
+      if (d.count > 0 || isHover || isSelected) {
+        const gR = (isHover || isSelected ? 3.6 : 2.6) * r;
+        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, gR);
+        grd.addColorStop(0, `rgba(${c.r},${c.g},${c.b},${isHover || isSelected ? 0.25 : 0.12})`);
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, gR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // body
+      const drawR = isHover ? r * 1.35 : isSelected ? r * 1.25 : r;
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${c.a})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, drawR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // today ring
+      if (isToday) {
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r + 5.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // selected ring
+      if (isSelected) {
+        ctx.strokeStyle = 'rgba(52, 211, 153, 0.55)';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r + 7.2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Hover label
+      if (isHover) {
+        const label = `${fmtDateShort(d.date)} · ${d.count}`;
+        ctx.font = '11px ui-sans-serif, system-ui, -apple-system';
+        const m = ctx.measureText(label);
+        const bx = clamp(p.x - m.width / 2 - 8, 6, w - (m.width + 16) - 6);
+        const by = clamp(p.y - r - 26, 10, height - 26);
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.92)';
+        drawRoundRect(ctx, bx, by, m.width + 16, 20, 8);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.92)';
+        ctx.fillText(label, bx + 8, by + 14);
+      }
+    }
+  };
+
+  useEffect(() => {
+    draw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wrap.w, isDark, selectedISO, days]);
+
+  const getHoveredIdx = (mx: number, my: number) => {
+    const arr = posRef.current;
+    for (let i = 0; i < arr.length; i++) {
+      const p = arr[i];
+      const r = starRadius(days[i]?.count ?? 0) + 10;
+      const dx = mx - p.x;
+      const dy = my - p.y;
+      if (Math.sqrt(dx * dx + dy * dy) < r) return i;
+    }
+    return -1;
+  };
+
+  const onMove = (mx: number, my: number) => {
+    const idx = getHoveredIdx(mx, my);
+    if (idx !== hoverIdxRef.current) {
+      hoverIdxRef.current = idx;
+      onHoverISO(idx >= 0 ? days[idx].iso : null);
+      draw();
+    }
+  };
+
+  return (
+    <div ref={wrap.ref} className="w-full">
+      <canvas
+        ref={canvasRef}
+        className="block w-full rounded-2xl border border-white/10 shadow-inner"
+        onMouseMove={(e) => {
+          const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+          onMove(e.clientX - rect.left, e.clientY - rect.top);
+        }}
+        onMouseLeave={() => {
+          hoverIdxRef.current = -1;
+          onHoverISO(null);
+          draw();
+        }}
+        onClick={(e) => {
+          const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+          const idx = getHoveredIdx(e.clientX - rect.left, e.clientY - rect.top);
+          if (idx >= 0) onSelectISO(days[idx].iso);
+        }}
+        onTouchStart={(e) => {
+          e.preventDefault();
+          const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+          const t = e.touches[0];
+          const idx = getHoveredIdx(t.clientX - rect.left, t.clientY - rect.top);
+          if (idx >= 0) {
+            hoverIdxRef.current = idx;
+            onHoverISO(days[idx].iso);
+            onSelectISO(days[idx].iso);
+            draw();
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function OrbitCanvas(props: {
+  days: DayDatum[];
+  isDark: boolean;
+  selectedISO: string | null;
+  onSelectISO: (iso: string) => void;
+  onHoverISO: (iso: string | null) => void;
+}) {
+  const { days, isDark, selectedISO, onSelectISO, onHoverISO } = props;
+  const wrap = useCanvasSize<HTMLDivElement>();
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hoverIdxRef = useRef(-1);
+
+  const height = 260;
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+
+  const draw = () => {
+    const canvas = canvasRef.current;
+    const w = wrap.w;
+    if (!canvas || !w) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${height}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const bg = ctx.createLinearGradient(0, 0, w, height);
+    bg.addColorStop(0, isDark ? 'rgba(2, 6, 23, 0.9)' : 'rgba(2, 6, 23, 0.92)');
+    bg.addColorStop(1, isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(15, 23, 42, 0.9)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, height);
+    drawStarfield(ctx, w, height, 7);
+
+    const cx = w / 2;
+    const cy = height / 2;
+    const baseR = Math.min(w, height) * 0.28;
+    const maxExtra = Math.min(w, height) * 0.08;
+    const maxTh = Math.min(w, height) * 0.08;
+
+    const hoverIdx = hoverIdxRef.current;
+    const todayISO = days[days.length - 1]?.iso;
+
+    // faint orbit guide
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // segments
+    for (let i = 0; i < days.length; i++) {
+      const d = days[i];
+      const a0 = (-Math.PI / 2) + (i / days.length) * Math.PI * 2;
+      const a1 = (-Math.PI / 2) + ((i + 1) / days.length) * Math.PI * 2;
+      const t = d.count <= 0 ? 0 : clamp(d.count / 12, 0, 1);
+      const r = baseR + t * maxExtra;
+      const th = 5 + t * maxTh;
+      const c = starRGBA(d.lvl);
+
+      const isHover = hoverIdx === i;
+      const isSelected = selectedISO === d.iso;
+      const isToday = todayISO === d.iso;
+
+      // glow
+      if (d.count > 0 || isHover || isSelected) {
+        ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${isHover || isSelected ? 0.25 : 0.14})`;
+        ctx.lineWidth = th * 2.2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, a0 + 0.01, a1 - 0.01);
+        ctx.stroke();
+      }
+
+      // arc body
+      ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${d.count > 0 ? c.a : 0.18})`;
+      ctx.lineWidth = isHover ? th * 1.25 : isSelected ? th * 1.15 : th;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, a0 + 0.01, a1 - 0.01);
+      ctx.stroke();
+
+      // tick dot
+      const mid = (a0 + a1) / 2;
+      const dx = Math.cos(mid) * (r + th * 0.55);
+      const dy = Math.sin(mid) * (r + th * 0.55);
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${d.count > 0 ? 0.85 : 0.25})`;
+      ctx.beginPath();
+      ctx.arc(cx + dx, cy + dy, isHover || isSelected ? 2.8 : 2.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Today marker
+      if (isToday) {
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + th + 8, a0 + 0.02, a1 - 0.02);
+        ctx.stroke();
+      }
+
+      // Selected marker
+      if (isSelected) {
+        ctx.strokeStyle = 'rgba(52, 211, 153, 0.55)';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + th + 12, a0 + 0.02, a1 - 0.02);
+        ctx.stroke();
+      }
+    }
+
+    // center label
+    const selected = selectedISO ? days.find((d) => d.iso === selectedISO) : null;
+    const hover = hoverIdx >= 0 ? days[hoverIdx] : null;
+    const d = hover ?? selected ?? days[days.length - 1];
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.92)';
+    ctx.font = '600 12px ui-sans-serif, system-ui, -apple-system';
+    ctx.fillText('Karma Orbit', cx, cy - 6);
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.82)';
+    ctx.font = '11px ui-sans-serif, system-ui, -apple-system';
+    ctx.fillText(`${fmtDateShort(d.date)} · ${d.count} quests`, cx, cy + 14);
+  };
+
+  useEffect(() => {
+    draw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wrap.w, isDark, selectedISO, days]);
+
+  const hitTest = (mx: number, my: number) => {
+    const w = wrap.w;
+    if (!w) return -1;
+    const cx = w / 2;
+    const cy = height / 2;
+    const dx = mx - cx;
+    const dy = my - cy;
+    const ang = Math.atan2(dy, dx); // -pi..pi
+    // map angle to index (0 at top)
+    const a = (ang + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
+    const idx = Math.floor((a / (Math.PI * 2)) * days.length);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const baseR = Math.min(w, height) * 0.28;
+    // generous band so hover is easy
+    if (dist < baseR - 24 || dist > baseR + 70) return -1;
+    return clamp(idx, 0, days.length - 1);
+  };
+
+  const onMove = (mx: number, my: number) => {
+    const idx = hitTest(mx, my);
+    if (idx !== hoverIdxRef.current) {
+      hoverIdxRef.current = idx;
+      onHoverISO(idx >= 0 ? days[idx].iso : null);
+      draw();
+    }
+  };
+
+  return (
+    <div ref={wrap.ref} className="w-full">
+      <canvas
+        ref={canvasRef}
+        className="block w-full rounded-2xl border border-white/10 shadow-inner"
+        onMouseMove={(e) => {
+          const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+          onMove(e.clientX - rect.left, e.clientY - rect.top);
+        }}
+        onMouseLeave={() => {
+          hoverIdxRef.current = -1;
+          onHoverISO(null);
+          draw();
+        }}
+        onClick={(e) => {
+          const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+          const idx = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+          if (idx >= 0) onSelectISO(days[idx].iso);
+        }}
+        onTouchStart={(e) => {
+          e.preventDefault();
+          const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+          const t = e.touches[0];
+          const idx = hitTest(t.clientX - rect.left, t.clientY - rect.top);
+          if (idx >= 0) {
+            hoverIdxRef.current = idx;
+            onHoverISO(days[idx].iso);
+            onSelectISO(days[idx].iso);
+            draw();
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 export function HabitHeatmap({ quests, days = 30 }: Props) {
   const { isDark, isHinglish } = useTheme();
   const { user } = useAuth();
   const { entries } = useMoodLogUnified();
   const [selectedISO, setSelectedISO] = useState<string | null>(null);
+  const [hoveredISO, setHoveredISO] = useState<string | null>(null);
+  const [logVersion, setLogVersion] = useState(0);
+
+  // Completion log is stored in localStorage and updated by App.tsx.
+  // Listen to an in-app event (same tab) + storage events (other tabs)
+  // so the heatmap refreshes immediately without a full reload.
+  useEffect(() => {
+    const onLocal = () => setLogVersion((v) => v + 1);
+    const onStorage = (e: StorageEvent) => {
+      const k = e.key || '';
+      if (k.startsWith('karmquest_completion_log_v1:')) setLogVersion((v) => v + 1);
+    };
+    window.addEventListener('kq_completion_log_updated', onLocal as any);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('kq_completion_log_updated', onLocal as any);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+  const [mode, setMode] = useState<HeatMode>(() => {
+    try {
+      const v = localStorage.getItem('kq_heatmap_mode_v1');
+      if (v === 'orbit' || v === 'grid' || v === 'constellation') return v;
+    } catch {
+      // ignore
+    }
+    return 'constellation';
+  });
 
   type CompletionEvent = {
     ts: number;
@@ -92,7 +632,7 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
     }
     out.sort((a, b) => a.ts - b.ts);
     return out;
-  }, [user?.id]);
+  }, [user?.id, logVersion]);
 
   const moodByDay = useMemo(() => {
     const map = new Map<string, MoodEntry>();
@@ -115,6 +655,25 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
       const iso = (q.completedAt || '').trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
       map.set(iso, (map.get(iso) ?? 0) + 1);
+    }
+    return map;
+  }, [quests, completionEvents]);
+
+  const xpByDay = useMemo(() => {
+    const map = new Map<string, number>();
+
+    if (completionEvents.length > 0) {
+      for (const ev of completionEvents) {
+        map.set(ev.day, (map.get(ev.day) ?? 0) + (ev.xp || 0));
+      }
+      return map;
+    }
+
+    for (const q of quests) {
+      const iso = (q.completedAt || '').trim();
+      if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(iso)) continue;
+      const xp = (q.earnedXp ?? q.xpReward ?? 0) as number;
+      map.set(iso, (map.get(iso) ?? 0) + xp);
     }
     return map;
   }, [quests, completionEvents]);
@@ -169,6 +728,42 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
     return { startISO, endISO, weeks, cells: all, monthLabels };
   }, [days]);
 
+  const effectiveDays = Math.min(30, Math.max(1, days));
+
+  const daysData = useMemo<DayDatum[]>(() => {
+    const today = localMidnight(new Date());
+    const start = addDays(today, -(effectiveDays - 1));
+    const out: DayDatum[] = [];
+    for (let i = 0; i < effectiveDays; i++) {
+      const dt = addDays(start, i);
+      const iso = isoFromDate(dt);
+      const count = completionsByDay.get(iso) ?? 0;
+      const xp = xpByDay.get(iso) ?? 0;
+      const mood = moodByDay.get(iso) ?? null;
+      out.push({ iso, date: dt, count, xp, mood, lvl: levelForCount(count) });
+    }
+    return out;
+  }, [effectiveDays, completionsByDay, xpByDay, moodByDay]);
+
+  const stats = useMemo(() => {
+    const counts = daysData.map((d) => d.count);
+    const total = counts.reduce((a, b) => a + b, 0);
+    const activeDays = counts.filter((c) => c > 0).length;
+    const totalXP = daysData.reduce((a, b) => a + (b.xp || 0), 0);
+    const bestStreak = bestStreakFromCounts(counts);
+    const streak = currentStreakFromCounts(counts);
+    const consistency = effectiveDays > 0 ? Math.round((activeDays / effectiveDays) * 100) : 0;
+    return { total, activeDays, totalXP, bestStreak, streak, consistency };
+  }, [daysData, effectiveDays]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kq_heatmap_mode_v1', mode);
+    } catch {
+      // ignore
+    }
+  }, [mode]);
+
   const selected = useMemo(() => {
     if (!selectedISO) return null;
     const count = completionsByDay.get(selectedISO) ?? 0;
@@ -188,13 +783,20 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
     return { iso: selectedISO, count, mood, list };
   }, [selectedISO, completionsByDay, moodByDay, quests, completionEvents]);
 
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const hovered = useMemo(() => {
+    if (!hoveredISO) return null;
+    const count = completionsByDay.get(hoveredISO) ?? 0;
+    const xp = xpByDay.get(hoveredISO) ?? 0;
+    const mood = moodByDay.get(hoveredISO) ?? null;
+    return { iso: hoveredISO, count, xp, mood };
+  }, [hoveredISO, completionsByDay, xpByDay, moodByDay]);
+
+  const darkLike = isDark || isHinglish;
+  const card = darkLike
+    ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
+    : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+  const tp = darkLike ? 'text-slate-200' : 'text-slate-800';
+  const ts = darkLike ? 'text-slate-400' : 'text-slate-500';
 
   const levelClass = (lvl: 0 | 1 | 2 | 3, inRange: boolean) => {
     if (!inRange) return isDark ? 'bg-white/[0.015]' : 'bg-slate-100/30';
@@ -207,8 +809,15 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
     return isDark ? 'bg-green-500/60' : 'bg-green-700/85';
   };
 
-  const effectiveDays = Math.min(30, Math.max(1, days));
   const title = isHinglish ? 'Habit Heatmap (30 din)' : 'Habit Heatmap (Last 30 days)';
+
+  const pill = 'text-[11px] font-semibold px-3 py-1.5 rounded-xl border transition-all select-none';
+  const pillOn = isDark
+    ? 'bg-white/[0.06] border-white/[0.10] text-slate-100'
+    : 'bg-slate-900 text-white border-slate-900/20';
+  const pillOff = isDark
+    ? 'bg-white/[0.02] border-white/[0.08] text-slate-300 hover:bg-white/[0.04]'
+    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50';
 
   return (
     <div
@@ -228,7 +837,34 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap justify-between sm:justify-end">
-          <div className={`text-[10px] font-semibold ${ts} flex items-center gap-2`}> 
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMode('constellation')}
+              className={`${pill} ${mode === 'constellation' ? pillOn : pillOff}`}
+              title="Constellation"
+            >
+              ✨ Constellation
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('orbit')}
+              className={`${pill} ${mode === 'orbit' ? pillOn : pillOff}`}
+              title="Orbit"
+            >
+              🪐 Orbit
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('grid')}
+              className={`${pill} ${mode === 'grid' ? pillOn : pillOff}`}
+              title="Classic grid"
+            >
+              ▦ Grid
+            </button>
+          </div>
+
+          <div className={`text-[10px] font-semibold ${ts} flex items-center gap-2`}>
             <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>0</span>
             <span className={`inline-block w-3 h-3 rounded ${levelClass(0, true)}`} />
             <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>1–5</span>
@@ -241,86 +877,190 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <div className="inline-block min-w-max">
-          {/* Month labels */}
-          <div className="flex items-center">
-            <div className="w-10" />
-            <div
-              className="grid"
-              style={{
-                gridTemplateColumns: `repeat(${weeks}, var(--hq-cell))`,
-                columnGap: 'var(--hq-gap)',
-              }}
-            >
-              {Array.from({ length: weeks }).map((_, col) => {
-                const label = monthLabels.find((m) => m.col === col)?.label ?? '';
-                return (
-                  <div key={col} className={`text-[10px] ${ts} select-none`} style={{ width: 'var(--hq-cell)' as any }}>
-                    {label}
+      {mode === 'grid' ? (
+        <div className="mt-4 overflow-x-auto">
+          <div className="inline-block min-w-max">
+            {/* Month labels */}
+            <div className="flex items-center">
+              <div className="w-10" />
+              <div
+                className="grid"
+                style={{
+                  gridTemplateColumns: `repeat(${weeks}, var(--hq-cell))`,
+                  columnGap: 'var(--hq-gap)',
+                }}
+              >
+                {Array.from({ length: weeks }).map((_, col) => {
+                  const label = monthLabels.find((m) => m.col === col)?.label ?? '';
+                  return (
+                    <div key={col} className={`text-[10px] ${ts} select-none`} style={{ width: 'var(--hq-cell)' as any }}>
+                      {label}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-start mt-1">
+              {/* Day labels (Mon/Wed/Fri) aligned to cells */}
+              <div
+                className={`w-10 pr-2 text-[10px] ${ts} select-none grid grid-rows-7`}
+                style={{
+                  rowGap: 'var(--hq-gap)',
+                }}
+              >
+                {['Mon', '', 'Wed', '', 'Fri', '', ''].map((lbl, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-end"
+                    style={{ height: 'var(--hq-cell)' as any }}
+                  >
+                    {lbl}
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                ))}
+              </div>
 
-          <div className="flex items-start mt-1">
-            {/* Day labels (Mon/Wed/Fri) aligned to cells */}
-            <div
-              className={`w-10 pr-2 text-[10px] ${ts} select-none grid grid-rows-7`}
-              style={{
-                rowGap: 'var(--hq-gap)',
-              }}
-            >
-              {['Mon', '', 'Wed', '', 'Fri', '', ''].map((lbl, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-end"
-                  style={{ height: 'var(--hq-cell)' as any }}
-                >
-                  {lbl}
-                </div>
-              ))}
-            </div>
+              <div className="grid grid-rows-7 grid-flow-col" style={{ gap: 'var(--hq-gap)' }}>
+                {cells.map((c) => {
+                  const count = c.inRange ? (completionsByDay.get(c.iso) ?? 0) : 0;
+                  const lvl = levelForCount(count);
+                  const mood = moodByDay.get(c.iso) ?? null;
+                  const isSelected = selectedISO === c.iso;
+                  const isToday = c.iso === endISO;
 
-            <div className="grid grid-rows-7 grid-flow-col" style={{ gap: 'var(--hq-gap)' }}>
-              {cells.map((c) => {
-                const count = c.inRange ? (completionsByDay.get(c.iso) ?? 0) : 0;
-                const lvl = levelForCount(count);
-                const mood = moodByDay.get(c.iso) ?? null;
-                const isSelected = selectedISO === c.iso;
-                const isToday = c.iso === endISO;
+                  const tooltipParts: string[] = [];
+                  tooltipParts.push(
+                    c.date.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+                  );
+                  tooltipParts.push(`${count} quest${count === 1 ? '' : 's'} completed`);
+                  if (mood) tooltipParts.push(`Mood ${moodEmoji(mood.mood)} · Productivity ${mood.productivity}`);
+                  const tooltip = tooltipParts.join(' — ');
 
-                const tooltipParts: string[] = [];
-                tooltipParts.push(
-                  c.date.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
-                );
-                tooltipParts.push(`${count} quest${count === 1 ? '' : 's'} completed`);
-                if (mood) tooltipParts.push(`Mood ${moodEmoji(mood.mood)} · Productivity ${mood.productivity}`);
-                const tooltip = tooltipParts.join(' — ');
-
-                return (
-                  <button
-                    key={c.iso}
-                    type="button"
-                    title={tooltip}
-                    onClick={() => {
-                      if (!c.inRange) return;
-                      setSelectedISO((cur) => (cur === c.iso ? null : c.iso));
-                    }}
-                    className={`w-[var(--hq-cell)] h-[var(--hq-cell)] rounded transition-all ${levelClass(lvl, c.inRange)} ${
-                      c.inRange ? 'hover:scale-[1.06]' : 'cursor-default'
-                    } ${isSelected ? 'ring-2 ring-emerald-400/60' : ''} ${
-                      isToday ? (isDark ? 'outline outline-1 outline-white/25' : 'outline outline-1 outline-slate-300/70') : ''
-                    }`}
-                    aria-label={tooltip}
-                  />
-                );
-              })}
+                  return (
+                    <button
+                      key={c.iso}
+                      type="button"
+                      title={tooltip}
+                      onClick={() => {
+                        if (!c.inRange) return;
+                        setSelectedISO((cur) => (cur === c.iso ? null : c.iso));
+                      }}
+                      className={`w-[var(--hq-cell)] h-[var(--hq-cell)] rounded transition-all ${levelClass(lvl, c.inRange)} ${
+                        c.inRange ? 'hover:scale-[1.06]' : 'cursor-default'
+                      } ${isSelected ? 'ring-2 ring-emerald-400/60' : ''} ${
+                        isToday ? (isDark ? 'outline outline-1 outline-white/25' : 'outline outline-1 outline-slate-300/70') : ''
+                      }`}
+                      aria-label={tooltip}
+                    />
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="mt-4">
+          {mode === 'constellation' ? (
+            <ConstellationCanvas
+              days={daysData}
+              isDark={isDark}
+              selectedISO={selectedISO}
+              onSelectISO={(iso) => setSelectedISO((cur) => (cur === iso ? null : iso))}
+              onHoverISO={(iso) => setHoveredISO(iso)}
+            />
+          ) : (
+            <OrbitCanvas
+              days={daysData}
+              isDark={isDark}
+              selectedISO={selectedISO}
+              onSelectISO={(iso) => setSelectedISO((cur) => (cur === iso ? null : iso))}
+              onHoverISO={(iso) => setHoveredISO(iso)}
+            />
+          )}
+
+          {/* Month axis (constellation only) */}
+          {mode === 'constellation' ? (
+            <div className={`mt-2 px-1.5 flex items-center gap-2 overflow-hidden ${ts} text-[10px] select-none`} aria-hidden>
+              {(() => {
+                const ticks = monthTicksForDays(daysData);
+                return ticks.map((m, idx) => {
+                  const end = idx + 1 < ticks.length ? ticks[idx + 1].start : daysData.length;
+                  const flex = Math.max(1, end - m.start);
+                  return (
+                    <div
+                      key={`${m.label}-${idx}`}
+                      className="text-center uppercase tracking-wider"
+                      style={{ flex }}
+                    >
+                      {m.label}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          ) : null}
+
+          {/* Quick detail + summary */}
+          <div
+            className={`mt-3 rounded-2xl p-3 sm:p-4 border ${
+              isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-slate-50/60 border-slate-200/50'
+            }`}
+          >
+            {(() => {
+              const previewISO = hovered?.iso ?? selected?.iso ?? endISO;
+              const previewDate = new Date(previewISO + 'T00:00:00');
+              const previewCount = hovered?.count ?? selected?.count ?? (completionsByDay.get(previewISO) ?? 0);
+              const previewXP = hovered?.xp ?? (xpByDay.get(previewISO) ?? 0);
+              const previewMood = hovered?.mood ?? selected?.mood ?? (moodByDay.get(previewISO) ?? null);
+
+              return (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                    <div className="min-w-0">
+                      <div className={`text-[12px] font-semibold ${tp}`}>{fmtDateLong(previewDate)}</div>
+                      <div className={`text-[11px] mt-1 ${ts}`}>
+                        {previewCount} quest{previewCount === 1 ? '' : 's'} completed
+                        {previewMood ? ` · Mood ${moodEmoji(previewMood.mood)} · Productivity ${previewMood.productivity}` : ''}
+                        {hovered ? ' · (hover)' : ''}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 flex-wrap">
+                      <div className="text-center min-w-[90px]">
+                        <div className={`text-[18px] font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>{stats.streak}</div>
+                        <div className={`text-[10px] ${ts} uppercase tracking-wider`}>streak</div>
+                      </div>
+                      <div className="text-center min-w-[90px]">
+                        <div className={`text-[18px] font-semibold ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>{previewXP}</div>
+                        <div className={`text-[10px] ${ts} uppercase tracking-wider`}>xp</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className={`rounded-xl px-3 py-2 text-center border ${isDark ? 'border-white/[0.06] bg-white/[0.02]' : 'border-slate-200/60 bg-white/70'}`}>
+                      <div className={`text-[14px] font-semibold ${tp}`}>{stats.total}</div>
+                      <div className={`text-[10px] ${ts} uppercase tracking-wider`}>total quests</div>
+                    </div>
+                    <div className={`rounded-xl px-3 py-2 text-center border ${isDark ? 'border-white/[0.06] bg-white/[0.02]' : 'border-slate-200/60 bg-white/70'}`}>
+                      <div className={`text-[14px] font-semibold ${tp}`}>{stats.activeDays}</div>
+                      <div className={`text-[10px] ${ts} uppercase tracking-wider`}>active days</div>
+                    </div>
+                    <div className={`rounded-xl px-3 py-2 text-center border ${isDark ? 'border-white/[0.06] bg-white/[0.02]' : 'border-slate-200/60 bg-white/70'}`}>
+                      <div className={`text-[14px] font-semibold ${tp}`}>{stats.consistency}%</div>
+                      <div className={`text-[10px] ${ts} uppercase tracking-wider`}>consistency</div>
+                    </div>
+                    <div className={`rounded-xl px-3 py-2 text-center border ${isDark ? 'border-white/[0.06] bg-white/[0.02]' : 'border-slate-200/60 bg-white/70'}`}>
+                      <div className={`text-[14px] font-semibold ${tp}`}>{stats.bestStreak}</div>
+                      <div className={`text-[10px] ${ts} uppercase tracking-wider`}>best streak</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Selected day detail */}
       {selected ? (
@@ -349,7 +1089,7 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
               onClick={() => setSelectedISO(null)}
               className={`self-start sm:self-auto text-[11px] font-semibold px-3 py-1.5 rounded-xl transition-all border ${
                 isHinglish
-                  ? 'text-rose-500 border-rose-200/40 hover:bg-rose-50'
+                  ? 'text-indigo-500 border-indigo-200/40 hover:bg-indigo-50'
                   : isDark
                     ? 'text-indigo-300 border-white/[0.08] hover:bg-white/[0.04]'
                     : 'text-indigo-600 border-slate-200 hover:bg-slate-50'

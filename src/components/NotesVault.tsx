@@ -1,5 +1,21 @@
-import { Plus, Search, X, Tag, Paperclip, Upload, ExternalLink, Trash2, Pencil, Save, Clock, RotateCcw } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  Plus,
+  Search,
+  X,
+  Tag,
+  Paperclip,
+  Upload,
+  ExternalLink,
+  Trash2,
+  Pencil,
+  Save,
+  Clock,
+  RotateCcw,
+  Download,
+  ArrowUpDown,
+  FileText,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
 import { useSupabaseAttachments } from '../hooks/useSupabaseAttachments';
@@ -23,6 +39,229 @@ interface NotesVaultProps {
 
 const emojis = ['📜', '💡', '⚛️', '🎯', '📋', '📚', '🧘', '🧪', '🎨', '🕉️', '🪷', '✨'];
 
+type SortMode = 'newest' | 'modified' | 'title' | 'tag';
+
+function safeParseISO(v?: string | null) {
+  if (!v) return NaN;
+  const ms = Date.parse(v);
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+function downloadTextFile(filename: string, text: string) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 250);
+}
+
+function noteToMarkdown(n: Note) {
+  const tags = n.tags?.length ? `\n\n---\nTags: ${n.tags.join(', ')}` : '';
+  const meta = `\nCreated: ${n.createdAt}${n.updatedAt ? `\nUpdated: ${n.updatedAt}` : ''}`;
+  return `# ${n.title}\n\n${n.content || ''}${tags}\n${meta}\n`;
+}
+
+function noteToText(n: Note) {
+  const tags = n.tags?.length ? `\n\nTags: ${n.tags.join(', ')}` : '';
+  const meta = `\n\nCreated: ${n.createdAt}${n.updatedAt ? `\nUpdated: ${n.updatedAt}` : ''}`;
+  return `${n.title}\n\n${n.content || ''}${tags}${meta}\n`;
+}
+
+/**
+ * Minimal markdown renderer:
+ * - Headings: #, ##, ###
+ * - Code blocks: ``` ... ```
+ * - Inline: **bold**, *italic*, `code`
+ *
+ * No HTML is executed; everything is rendered as React nodes.
+ */
+function renderInlineMarkdown(text: string) {
+  const nodes: ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+
+  const pushText = (s: string) => {
+    if (!s) return;
+    nodes.push(s);
+  };
+
+  while (i < text.length) {
+    // Find next token among **, *, `
+    const nextBold = text.indexOf('**', i);
+    const nextCode = text.indexOf('`', i);
+    const nextItalic = text.indexOf('*', i);
+
+    const candidates = [nextBold, nextCode, nextItalic].filter((x) => x >= 0);
+    if (candidates.length === 0) {
+      pushText(text.slice(i));
+      break;
+    }
+
+    const next = Math.min(...candidates);
+    pushText(text.slice(i, next));
+
+    // Prefer bold when ** starts at next
+    if (nextBold === next) {
+      const end = text.indexOf('**', next + 2);
+      if (end >= 0) {
+        const inner = text.slice(next + 2, end);
+        nodes.push(
+          <strong key={`b-${key++}`} className="font-semibold">
+            {inner}
+          </strong>
+        );
+        i = end + 2;
+        continue;
+      }
+      // No closing, treat as text
+      pushText('**');
+      i = next + 2;
+      continue;
+    }
+
+    // Inline code
+    if (nextCode === next) {
+      const end = text.indexOf('`', next + 1);
+      if (end >= 0) {
+        const inner = text.slice(next + 1, end);
+        nodes.push(
+          <code
+            key={`c-${key++}`}
+            className="px-1.5 py-0.5 rounded-md text-[12px] font-mono bg-black/5 dark:bg-white/10"
+          >
+            {inner}
+          </code>
+        );
+        i = end + 1;
+        continue;
+      }
+      pushText('`');
+      i = next + 1;
+      continue;
+    }
+
+    // Italic (single *)
+    if (nextItalic === next) {
+      // Avoid treating ** as italic (already handled above)
+      if (text.slice(next, next + 2) === '**') {
+        pushText('*');
+        i = next + 1;
+        continue;
+      }
+      const end = text.indexOf('*', next + 1);
+      if (end >= 0) {
+        const inner = text.slice(next + 1, end);
+        nodes.push(
+          <em key={`i-${key++}`} className="italic">
+            {inner}
+          </em>
+        );
+        i = end + 1;
+        continue;
+      }
+      pushText('*');
+      i = next + 1;
+      continue;
+    }
+  }
+
+  return nodes;
+}
+
+function MarkdownView({
+  content,
+  isDark,
+  isModern,
+}: {
+  content: string;
+  isDark: boolean;
+  isModern: boolean;
+}) {
+  // Split by fenced code blocks.
+  const parts = content.split('```');
+  const out: ReactNode[] = [];
+
+  for (let p = 0; p < parts.length; p++) {
+    const seg = parts[p];
+    const isCode = p % 2 === 1;
+
+    if (isCode) {
+      // First line can be a language tag; keep it but do not highlight.
+      const lines = seg.replace(/^\n+/, '').replace(/\n+$/, '').split('\n');
+      const first = lines[0] ?? '';
+      const looksLikeLang = /^[a-zA-Z0-9#+_.-]{1,20}$/.test(first.trim());
+      const code = (looksLikeLang ? lines.slice(1) : lines).join('\n');
+
+      out.push(
+        <pre
+          key={`code-${p}`}
+          className={`rounded-xl p-3 my-3 overflow-auto text-[12px] leading-relaxed font-mono border ${
+            isModern
+              ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)]'
+              : isDark
+                ? 'bg-white/[0.03] border-white/[0.06] text-slate-200'
+                : 'bg-slate-50 border-slate-200 text-slate-800'
+          }`}
+        >
+          <code>{code}</code>
+        </pre>
+      );
+      continue;
+    }
+
+    // Normal markdown lines
+    const lines = seg.split('\n');
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+
+      // Empty line -> spacing
+      if (line.trim().length === 0) {
+        out.push(<div key={`sp-${p}-${li}`} className="h-2" />);
+        continue;
+      }
+
+      const h1 = line.match(/^#\s+(.*)$/);
+      const h2 = line.match(/^##\s+(.*)$/);
+      const h3 = line.match(/^###\s+(.*)$/);
+
+      if (h1) {
+        out.push(
+          <h3 key={`h1-${p}-${li}`} className="text-[16px] font-extrabold mt-2">
+            {renderInlineMarkdown(h1[1])}
+          </h3>
+        );
+        continue;
+      }
+      if (h2) {
+        out.push(
+          <h4 key={`h2-${p}-${li}`} className="text-[14px] font-bold mt-2">
+            {renderInlineMarkdown(h2[1])}
+          </h4>
+        );
+        continue;
+      }
+      if (h3) {
+        out.push(
+          <h5 key={`h3-${p}-${li}`} className="text-[13px] font-semibold mt-2">
+            {renderInlineMarkdown(h3[1])}
+          </h5>
+        );
+        continue;
+      }
+
+      out.push(
+        <p key={`p-${p}-${li}`} className="text-[13px] leading-relaxed">
+          {renderInlineMarkdown(line)}
+        </p>
+      );
+    }
+  }
+
+  return <div className="space-y-0.5">{out}</div>;
+}
+
 export function NotesVault({
   notes,
   onAdd,
@@ -32,19 +271,34 @@ export function NotesVault({
   focusNoteId,
   onFocusHandled,
 }: NotesVaultProps) {
-  const { isDark, isHinglish, lang } = useTheme();
+  const { isDark, isHinglish, isModern, lang } = useTheme();
+
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [previewNote, setPreviewNote] = useState<Note | null>(null);
 
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
+
   const [editMode, setEditMode] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+
+  const [revPage, setRevPage] = useState(1);
+  const REV_PAGE_SIZE = 6;
+
+  const [restoreFrom, setRestoreFrom] = useState<string | null>(null);
+
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editTags, setEditTags] = useState('');
   const [editColor, setEditColor] = useState(noteColors[0]);
   const [editEmoji, setEditEmoji] = useState('📜');
+
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const editContentRef = useRef<HTMLTextAreaElement | null>(null);
+  const newContentRef = useRef<HTMLTextAreaElement | null>(null);
 
   const previewNoteId = previewNote?.id ?? null;
   const attachments = useSupabaseAttachments('note', previewNoteId);
@@ -58,19 +312,23 @@ export function NotesVault({
   const [sizePopup, setSizePopup] = useState<{ title: string; message: string } | null>(null);
   const MAX_ATTACHMENT_BYTES = 1 * 1024 * 1024; // 1MB
 
-  const card = isHinglish
-    ? 'bg-white/70 backdrop-blur-xl border border-rose-200/20 shadow-sm'
-    : isDark
-      ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
-      : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
-  const tp = isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
-  const ts = isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
-  const tm = isHinglish ? 'text-slate-400' : isDark ? 'text-slate-600' : 'text-slate-400';
-  const inputCls = isHinglish
-    ? 'bg-white/60 border-rose-200/30 text-slate-800 placeholder:text-slate-400 focus:ring-rose-300/30'
-    : isDark
-      ? 'bg-white/[0.03] border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20'
-      : 'bg-slate-50/80 border-slate-200/50 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30';
+  const card = isModern
+    ? 'bg-[var(--kq-surface)] border border-[var(--kq-border)] shadow-[0_1px_1px_rgba(0,0,0,0.04)]'
+    : isHinglish
+      ? 'bg-white/70 backdrop-blur-xl border border-indigo-200/20 shadow-sm'
+      : isDark
+        ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] shadow-sm'
+        : 'bg-white/80 backdrop-blur-xl border border-slate-200/40 shadow-sm';
+  const tp = isModern ? 'text-[var(--kq-text-primary)]' : isHinglish ? 'text-slate-800' : isDark ? 'text-slate-200' : 'text-slate-800';
+  const ts = isModern ? 'text-[var(--kq-text-secondary)]' : isHinglish ? 'text-slate-500' : isDark ? 'text-slate-400' : 'text-slate-500';
+  const tm = isModern ? 'text-[var(--kq-text-muted)]' : isHinglish ? 'text-slate-400' : isDark ? 'text-slate-600' : 'text-slate-400';
+  const inputCls = isModern
+    ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)] placeholder:text-[var(--kq-text-muted)] focus:ring-[var(--kq-primary)]/20'
+    : isHinglish
+      ? 'bg-white/60 border-indigo-200/30 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30'
+      : isDark
+        ? 'bg-white/[0.03] border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-indigo-500/20'
+        : 'bg-slate-50/80 border-slate-200/50 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30';
 
   const allTags = Array.from(new Set(notes.flatMap((n) => n.tags)));
 
@@ -86,26 +344,69 @@ export function NotesVault({
     return `${isHinglish ? 'Banaaya' : 'Created'} ${created}`;
   };
 
+  // Close export menu on outside click.
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!showExportMenu) return;
+      const el = exportMenuRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      setShowExportMenu(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [showExportMenu]);
+
   // Sync with global search bar.
   useEffect(() => {
     if (externalSearchQuery.trim().length === 0) return;
     setSearchQuery(externalSearchQuery);
   }, [externalSearchQuery]);
 
-  const filteredNotes = useMemo(
-    () =>
-      notes.filter((n) => {
-        const q = searchQuery.toLowerCase();
-        const matchSearch =
-          !searchQuery ||
-          n.title.toLowerCase().includes(q) ||
-          n.content.toLowerCase().includes(q) ||
-          n.tags.some((tag) => tag.toLowerCase().includes(q));
-        const matchTag = !selectedTag || n.tags.includes(selectedTag);
-        return matchSearch && matchTag;
-      }),
-    [notes, searchQuery, selectedTag]
-  );
+  const filteredNotes = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    const base = notes.filter((n) => {
+      const matchSearch =
+        !searchQuery ||
+        n.title.toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q) ||
+        n.tags.some((tag) => tag.toLowerCase().includes(q));
+      const matchTag = !selectedTag || n.tags.includes(selectedTag);
+      return matchSearch && matchTag;
+    });
+
+    const byNewest = (a: Note, b: Note) => safeParseISO(b.createdAt) - safeParseISO(a.createdAt);
+    const byModified = (a: Note, b: Note) => {
+      const am = safeParseISO(a.updatedAt || a.createdAt);
+      const bm = safeParseISO(b.updatedAt || b.createdAt);
+      return bm - am;
+    };
+    const byTitle = (a: Note, b: Note) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+    const byTag = (a: Note, b: Note) => {
+      const at = (a.tags?.[0] ?? '').toLowerCase();
+      const bt = (b.tags?.[0] ?? '').toLowerCase();
+      if (at !== bt) return at.localeCompare(bt);
+      return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+    };
+
+    const sorted = [...base];
+    switch (sortMode) {
+      case 'modified':
+        sorted.sort(byModified);
+        break;
+      case 'title':
+        sorted.sort(byTitle);
+        break;
+      case 'tag':
+        sorted.sort(byTag);
+        break;
+      case 'newest':
+      default:
+        sorted.sort(byNewest);
+        break;
+    }
+    return sorted;
+  }, [notes, searchQuery, selectedTag, sortMode]);
 
   // Focus/highlight from global search.
   useEffect(() => {
@@ -134,7 +435,10 @@ export function NotesVault({
     setEditTags(previewNote.tags.join(', '));
     setEditColor(previewNote.color);
     setEditEmoji(previewNote.emoji);
-  }, [previewNote?.id]);
+    setShowExportMenu(false);
+    setRevPage(1);
+    setRestoreFrom(null);
+  }, [previewNote?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAdd = () => {
     if (!newTitle.trim()) return;
@@ -158,6 +462,8 @@ export function NotesVault({
     if (!previewNote) return;
     setEditMode(true);
     setShowHistory(false);
+    setShowExportMenu(false);
+    setRestoreFrom(null);
     setEditTitle(previewNote.title);
     setEditContent(previewNote.content);
     setEditTags(previewNote.tags.join(', '));
@@ -173,6 +479,7 @@ export function NotesVault({
     setEditTags(previewNote.tags.join(', '));
     setEditColor(previewNote.color);
     setEditEmoji(previewNote.emoji);
+    setRestoreFrom(null);
   };
 
   const saveEdit = () => {
@@ -185,6 +492,19 @@ export function NotesVault({
       .map((x) => x.trim())
       .filter(Boolean);
 
+    const dirty =
+      title !== previewNote.title ||
+      editContent !== previewNote.content ||
+      tags.join('|') !== previewNote.tags.join('|') ||
+      editColor !== previewNote.color ||
+      editEmoji !== previewNote.emoji;
+
+    if (!dirty) {
+      setEditMode(false);
+      setRestoreFrom(null);
+      return;
+    }
+
     onUpdate(previewNote.id, {
       title,
       content: editContent,
@@ -194,22 +514,188 @@ export function NotesVault({
     });
 
     setEditMode(false);
+    setRestoreFrom(null);
   };
 
   const restoreRevision = (rev: NoteRevision) => {
     if (!previewNote) return;
-    onUpdate(previewNote.id, {
-      title: rev.title,
-      content: rev.content,
-      tags: rev.tags,
-      color: rev.color,
-      emoji: rev.emoji,
-    });
+
+    const same =
+      previewNote.title === rev.title &&
+      previewNote.content === rev.content &&
+      previewNote.color === rev.color &&
+      previewNote.emoji === rev.emoji &&
+      previewNote.tags.join('|') === (rev.tags || []).join('|');
+
+    if (same) {
+      setSizePopup({
+        title: 'Nothing to restore',
+        message: 'This version is already the current note.',
+      });
+      return;
+    }
+
+    // Load into editor first. This prevents creating duplicate history entries
+    // when users explore past versions.
+    setEditMode(true);
+    setShowHistory(false);
+    setShowExportMenu(false);
+
+    setEditTitle(rev.title);
+    setEditContent(rev.content);
+    setEditTags((rev.tags || []).join(', '));
+    setEditColor(rev.color);
+    setEditEmoji(rev.emoji);
+
+    setRestoreFrom(rev.editedAt);
   };
 
+  const doExport = (format: 'md' | 'txt') => {
+    if (!previewNote) return;
+    const safeTitle = (previewNote.title || 'note').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80);
+    if (format === 'md') downloadTextFile(`${safeTitle}.md`, noteToMarkdown(previewNote));
+    else downloadTextFile(`${safeTitle}.txt`, noteToText(previewNote));
+    setShowExportMenu(false);
+  };
+
+  const applyMarkdown = (target: 'new' | 'edit', action: 'h1' | 'h2' | 'bold' | 'italic' | 'code' | 'codeblock' | 'bullet') => {
+    const textarea = target === 'edit' ? editContentRef.current : newContentRef.current;
+    if (!textarea) return;
+
+    const value = target === 'edit' ? editContent : newContent;
+    const setValue = target === 'edit' ? setEditContent : setNewContent;
+
+    const start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : value.length;
+    const end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : value.length;
+    const selected = value.slice(start, end);
+
+    const update = (next: string, selStart: number, selEnd: number) => {
+      setValue(next);
+      requestAnimationFrame(() => {
+        try {
+          textarea.focus();
+          textarea.setSelectionRange(selStart, selEnd);
+        } catch {
+          // ignore
+        }
+      });
+    };
+
+    const wrap = (before: string, after: string, emptyFill = '') => {
+      const inner = selected.length ? selected : emptyFill;
+      const next = value.slice(0, start) + before + inner + after + value.slice(end);
+      const selS = start + before.length;
+      const selE = selS + inner.length;
+      update(next, selS, selE);
+    };
+
+    const prefixLines = (prefix: string) => {
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = value.indexOf('\n', end);
+      const blockEnd = lineEnd === -1 ? value.length : lineEnd;
+
+      const block = value.slice(lineStart, blockEnd);
+      const lines = block.split('\n');
+      const prefixed = lines.map((ln) => (ln.startsWith(prefix) ? ln : prefix + ln)).join('\n');
+      const next = value.slice(0, lineStart) + prefixed + value.slice(blockEnd);
+
+      const addedPerLine = prefix.length;
+      const lineCount = lines.length;
+      const selS = start + addedPerLine;
+      const selE = end + addedPerLine * lineCount;
+      update(next, selS, selE);
+    };
+
+    switch (action) {
+      case 'h1':
+        prefixLines('# ');
+        return;
+      case 'h2':
+        prefixLines('## ');
+        return;
+      case 'bold':
+        wrap('**', '**', 'bold');
+        return;
+      case 'italic':
+        wrap('*', '*', 'italic');
+        return;
+      case 'code':
+        wrap('`', '`', 'code');
+        return;
+      case 'codeblock': {
+        if (!selected.length) {
+          const before = '```\n';
+          const after = '\n```';
+          const next = value.slice(0, start) + before + '\n' + after + value.slice(end);
+          const selS = start + before.length;
+          const selE = selS;
+          update(next, selS, selE);
+          return;
+        }
+        wrap('```\n', '\n```');
+        return;
+      }
+      case 'bullet':
+        prefixLines('- ');
+        return;
+      default:
+        return;
+    }
+  };
+
+  const editTagsArr = editTags
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const canSaveEdit = !!previewNote &&
+    editTitle.trim().length > 0 &&
+    (
+      editTitle.trim() !== previewNote.title ||
+      editContent !== previewNote.content ||
+      editTagsArr.join('|') !== previewNote.tags.join('|') ||
+      editColor !== previewNote.color ||
+      editEmoji !== previewNote.emoji
+    );
+
+  const revisionsPager = useMemo(() => {
+    const revs = Array.isArray(previewNote?.revisions) ? previewNote.revisions : [];
+    const totalPages = Math.max(1, Math.ceil(revs.length / REV_PAGE_SIZE));
+    const page = Math.min(Math.max(revPage, 1), totalPages);
+    const start = (page - 1) * REV_PAGE_SIZE;
+    return {
+      revs,
+      page,
+      totalPages,
+      items: revs.slice(start, start + REV_PAGE_SIZE),
+    };
+  }, [previewNote?.revisions, revPage]);
+
+  const revisionMatchesCurrent = (rev: NoteRevision, n: Note) => {
+    return (
+      n.title === rev.title &&
+      n.content === rev.content &&
+      n.color === rev.color &&
+      n.emoji === rev.emoji &&
+      n.tags.join('|') === (rev.tags || []).join('|')
+    );
+  };
   const btnGradient = isHinglish
-    ? 'bg-gradient-to-r from-rose-500 to-violet-500'
+    ? 'bg-gradient-to-r from-indigo-500 to-violet-500'
     : 'bg-gradient-to-r from-indigo-500 to-violet-500';
+
+  const sortLabel = (m: SortMode) => {
+    if (isHinglish) {
+      if (m === 'newest') return 'Newest';
+      if (m === 'modified') return 'Modified';
+      if (m === 'title') return 'Title';
+      return 'Tag';
+    }
+    if (m === 'newest') return 'Newest';
+    if (m === 'modified') return 'Modified';
+    if (m === 'title') return 'Title (A–Z)';
+    return 'Tag';
+  };
 
   return (
     <div className="space-y-5 animate-slide-up">
@@ -221,7 +707,7 @@ export function NotesVault({
           <div
             className={`w-full max-w-sm rounded-2xl shadow-2xl p-5 border ${
               isHinglish
-                ? 'bg-white/90 border-rose-200/40'
+                ? 'bg-white/90 border-indigo-200/40'
                 : isDark
                   ? 'bg-[#16162A] border-white/[0.08]'
                   : 'bg-white border-slate-200/60'
@@ -237,6 +723,7 @@ export function NotesVault({
                 onClick={() => setSizePopup(null)}
                 className={`p-2 rounded-xl transition-all ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-slate-100'}`}
                 aria-label="Close"
+                type="button"
               >
                 <X size={16} className={isDark ? 'text-slate-300' : 'text-slate-600'} />
               </button>
@@ -246,11 +733,12 @@ export function NotesVault({
                 onClick={() => setSizePopup(null)}
                 className={`px-4 py-2 rounded-xl text-[12px] font-semibold ${
                   isHinglish
-                    ? 'bg-rose-500/10 text-rose-700'
+                    ? 'bg-indigo-500/10 text-indigo-700'
                     : isDark
                       ? 'bg-white/[0.06] text-slate-200'
                       : 'bg-slate-100 text-slate-700'
                 }`}
+                type="button"
               >
                 OK
               </button>
@@ -270,23 +758,42 @@ export function NotesVault({
         <button
           onClick={() => setShowForm(true)}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-medium text-[13px] shadow-md hover:shadow-lg hover:scale-[1.02] transition-all ${btnGradient}`}
+          type="button"
         >
           <Plus size={16} /> {t('newScroll', lang)}
         </button>
       </div>
 
-      {/* Search + Tags */}
+      {/* Search + Tags + Sort */}
       <div className="space-y-2.5">
-        <div className="relative group">
-          <Search size={15} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('searchNotes', lang)}
-            className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 transition-all ${inputCls}`}
-          />
+        <div className="flex flex-col md:flex-row gap-2.5 items-stretch md:items-center">
+          <div className="relative group flex-1">
+            <Search size={15} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('searchNotes', lang)}
+              className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 transition-all ${inputCls}`}
+            />
+          </div>
+
+          <div className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${isModern ? 'border-[var(--kq-border)]' : isDark ? 'border-white/[0.06]' : 'border-slate-200/50'}`}>
+            <ArrowUpDown size={14} className={isDark ? 'text-slate-400' : 'text-slate-500'} />
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              className={`bg-transparent text-[13px] outline-none ${tp}`}
+              aria-label="Sort notes"
+            >
+              <option value="newest">{sortLabel('newest')}</option>
+              <option value="modified">{sortLabel('modified')}</option>
+              <option value="title">{sortLabel('title')}</option>
+              <option value="tag">{sortLabel('tag')}</option>
+            </select>
+          </div>
         </div>
+
         <div className="flex gap-1.5 flex-wrap items-center">
           <Tag size={13} className={isDark ? 'text-slate-600' : 'text-slate-400'} />
           <button
@@ -294,7 +801,7 @@ export function NotesVault({
             className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
               !selectedTag
                 ? isHinglish
-                  ? 'bg-rose-500/10 text-rose-600'
+                  ? 'bg-indigo-500/10 text-indigo-600'
                   : isDark
                     ? 'bg-indigo-500/10 text-indigo-400'
                     : 'bg-indigo-50 text-indigo-600'
@@ -302,6 +809,7 @@ export function NotesVault({
                   ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
                   : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
             }`}
+            type="button"
           >
             {t('all', lang)}
           </button>
@@ -312,7 +820,7 @@ export function NotesVault({
               className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
                 selectedTag === tag
                   ? isHinglish
-                    ? 'bg-rose-500/10 text-rose-600'
+                    ? 'bg-indigo-500/10 text-indigo-600'
                     : isDark
                       ? 'bg-indigo-500/10 text-indigo-400'
                       : 'bg-indigo-50 text-indigo-600'
@@ -320,6 +828,7 @@ export function NotesVault({
                     ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
                     : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
               }`}
+              type="button"
             >
               {tag}
             </button>
@@ -331,7 +840,7 @@ export function NotesVault({
       {showForm && (
         <div
           className={`${card} rounded-2xl p-5 animate-slide-up border ${
-            isHinglish ? 'border-rose-300/30' : isDark ? 'border-indigo-500/15' : 'border-indigo-200/40'
+            isHinglish ? 'border-indigo-300/30' : isDark ? 'border-indigo-500/15' : 'border-indigo-200/40'
           }`}
         >
           <h3 className={`text-sm font-semibold ${tp} mb-3`}>{t('inscribeScroll', lang)}</h3>
@@ -353,6 +862,7 @@ export function NotesVault({
                             ? 'hover:bg-white/[0.04]'
                             : 'hover:bg-slate-50'
                       }`}
+                      type="button"
                     >
                       {e}
                     </button>
@@ -370,6 +880,7 @@ export function NotesVault({
                         isDark ? 'ring-indigo-400 ring-offset-[#16162A]' : 'ring-indigo-400 ring-offset-white'
                       }`}
                       style={{ backgroundColor: c }}
+                      type="button"
                     />
                   ))}
                 </div>
@@ -384,7 +895,18 @@ export function NotesVault({
               className={`w-full px-3.5 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
               autoFocus
             />
+            <div className={`flex flex-wrap items-center gap-1.5 px-2 py-2 rounded-xl border ${isModern ? 'border-[var(--kq-border)] bg-[var(--kq-bg2)]' : isDark ? 'border-white/[0.06] bg-white/[0.03]' : 'border-slate-200/50 bg-slate-50/80'}`}>
+
+              <button type="button" onClick={() => applyMarkdown('new', 'h1')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>H1</button>
+              <button type="button" onClick={() => applyMarkdown('new', 'h2')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>H2</button>
+              <button type="button" onClick={() => applyMarkdown('new', 'bold')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>B</button>
+              <button type="button" onClick={() => applyMarkdown('new', 'italic')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold italic ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>I</button>
+              <button type="button" onClick={() => applyMarkdown('new', 'code')} className={`px-2 py-1 rounded-lg text-[11px] font-mono ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>{'</>'}</button>
+              <button type="button" onClick={() => applyMarkdown('new', 'codeblock')} className={`px-2 py-1 rounded-lg text-[11px] font-mono ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>```</button>
+              <button type="button" onClick={() => applyMarkdown('new', 'bullet')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>• List</button>
+            </div>
             <textarea
+              ref={newContentRef}
               value={newContent}
               onChange={(e) => setNewContent(e.target.value)}
               placeholder={t('scrollContent', lang)}
@@ -402,10 +924,11 @@ export function NotesVault({
               <button
                 onClick={() => setShowForm(false)}
                 className={`px-3.5 py-2 text-[13px] rounded-lg ${isDark ? 'text-slate-400 hover:bg-white/[0.03]' : 'text-slate-500 hover:bg-slate-50'}`}
+                type="button"
               >
                 {t('cancel', lang)}
               </button>
-              <button onClick={handleAdd} className={`px-5 py-2 text-white text-[13px] font-medium rounded-lg shadow-md ${btnGradient}`}>
+              <button onClick={handleAdd} className={`px-5 py-2 text-white text-[13px] font-medium rounded-lg shadow-md ${btnGradient}`} type="button">
                 {t('createScroll', lang)}
               </button>
             </div>
@@ -425,7 +948,7 @@ export function NotesVault({
               className={`${card} rounded-2xl p-4 cursor-pointer group hover:-translate-y-0.5 hover:shadow-md transition-all duration-300 relative overflow-hidden ${
                 isFocused
                   ? isHinglish
-                    ? 'ring-2 ring-rose-400/40'
+                    ? 'ring-2 ring-indigo-400/40'
                     : isDark
                       ? 'ring-2 ring-indigo-400/30'
                       : 'ring-2 ring-indigo-400/30'
@@ -487,23 +1010,64 @@ export function NotesVault({
           >
             <div className="absolute top-0 left-0 w-full h-[3px] rounded-t-2xl" style={{ backgroundColor: previewNote.color }} />
 
-            <div className="absolute top-4 right-4 flex items-center gap-2">
+            <div className="absolute top-4 right-4 flex items-center gap-2" ref={exportMenuRef}>
+              {!editMode && (
+                <button
+                  onClick={() => setShowExportMenu((v) => !v)}
+                  className={`p-2 rounded-lg transition-all ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'}`}
+                  title={isHinglish ? 'Export' : 'Export'}
+                  type="button"
+                >
+                  <Download size={16} className={isDark ? 'text-slate-300' : 'text-slate-600'} />
+                </button>
+              )}
+
               {!editMode && (
                 <button
                   onClick={startEdit}
                   className={`p-2 rounded-lg transition-all ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'}`}
-                  title={isHinglish ? 'Edit' : 'Edit'}
+                  title="Edit"
+                  type="button"
                 >
                   <Pencil size={16} className={isDark ? 'text-slate-300' : 'text-slate-600'} />
                 </button>
               )}
+
               <button
                 onClick={() => setPreviewNote(null)}
                 className={`p-2 rounded-lg transition-all ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'}`}
-                title={isHinglish ? 'Close' : 'Close'}
+                title="Close"
+                type="button"
               >
                 <X size={16} className={isDark ? 'text-slate-400' : 'text-slate-500'} />
               </button>
+
+              {showExportMenu && !editMode && (
+                <div
+                  className={`absolute right-0 top-10 w-44 rounded-xl shadow-xl border overflow-hidden ${
+                    isDark ? 'bg-[#111124] border-white/[0.08]' : 'bg-white border-slate-200'
+                  }`}
+                >
+                  <button
+                    onClick={() => doExport('md')}
+                    className={`w-full px-3 py-2 text-left text-[12px] flex items-center gap-2 ${
+                      isDark ? 'hover:bg-white/[0.04] text-slate-200' : 'hover:bg-slate-50 text-slate-700'
+                    }`}
+                    type="button"
+                  >
+                    <FileText size={14} /> Export .md
+                  </button>
+                  <button
+                    onClick={() => doExport('txt')}
+                    className={`w-full px-3 py-2 text-left text-[12px] flex items-center gap-2 ${
+                      isDark ? 'hover:bg-white/[0.04] text-slate-200' : 'hover:bg-slate-50 text-slate-700'
+                    }`}
+                    type="button"
+                  >
+                    <FileText size={14} /> Export .txt
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3 mb-4">
@@ -524,9 +1088,7 @@ export function NotesVault({
               <div className="space-y-3 mb-4">
                 <div className="flex items-start gap-3 flex-wrap">
                   <div className="space-y-1">
-                    <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {isHinglish ? 'Icon' : 'Icon'}
-                    </label>
+                    <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Icon</label>
                     <div className="flex gap-0.5 flex-wrap max-w-xs">
                       {emojis.map((e) => (
                         <button
@@ -549,9 +1111,7 @@ export function NotesVault({
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {isHinglish ? 'Color' : 'Color'}
-                    </label>
+                    <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Color</label>
                     <div className="flex gap-1 flex-wrap">
                       {noteColors.map((c) => (
                         <button
@@ -576,7 +1136,24 @@ export function NotesVault({
                   className={`w-full px-3.5 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
                   autoFocus
                 />
+                {restoreFrom && (
+                  <div className={`px-3 py-2 rounded-xl text-[11px] ${isModern ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)]' : isDark ? 'bg-white/[0.03] border border-white/[0.06]' : 'bg-slate-50/80 border border-slate-200/50'} ${ts}`}>
+                    Restoring a previous version from <span className={`${tp} font-semibold`}>{prettyRelative(restoreFrom)}</span>. Review and click <span className={`${tp} font-semibold`}>Save</span> to apply.
+                  </div>
+                )}
+
+                <div className={`flex flex-wrap items-center gap-1.5 px-2 py-2 rounded-xl border ${isModern ? 'border-[var(--kq-border)] bg-[var(--kq-bg2)]' : isDark ? 'border-white/[0.06] bg-white/[0.03]' : 'border-slate-200/50 bg-slate-50/80'}`}>
+
+                  <button type="button" onClick={() => applyMarkdown('edit', 'h1')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>H1</button>
+                  <button type="button" onClick={() => applyMarkdown('edit', 'h2')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>H2</button>
+                  <button type="button" onClick={() => applyMarkdown('edit', 'bold')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>B</button>
+                  <button type="button" onClick={() => applyMarkdown('edit', 'italic')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold italic ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>I</button>
+                  <button type="button" onClick={() => applyMarkdown('edit', 'code')} className={`px-2 py-1 rounded-lg text-[11px] font-mono ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>{'</>'}</button>
+                  <button type="button" onClick={() => applyMarkdown('edit', 'codeblock')} className={`px-2 py-1 rounded-lg text-[11px] font-mono ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>```</button>
+                  <button type="button" onClick={() => applyMarkdown('edit', 'bullet')} className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'}`}>• List</button>
+                </div>
                 <textarea
+                  ref={editContentRef}
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
                   placeholder={t('scrollContent', lang)}
@@ -601,18 +1178,20 @@ export function NotesVault({
                   </button>
                   <button
                     onClick={saveEdit}
-                    className={`inline-flex items-center gap-1.5 px-5 py-2 text-white text-[13px] font-medium rounded-lg shadow-md ${btnGradient}`}
+                    disabled={!canSaveEdit}
+                    className={`inline-flex items-center gap-1.5 px-5 py-2 text-white text-[13px] font-medium rounded-lg shadow-md ${btnGradient} ${!canSaveEdit ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}`}
                     type="button"
                   >
-                    <Save size={16} /> {isHinglish ? 'Save' : 'Save'}
+                    <Save size={16} /> Save
                   </button>
                 </div>
               </div>
             ) : (
               <>
-                <p className={`text-[13px] leading-relaxed mb-4 whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                  {previewNote.content}
-                </p>
+                <div className={`mb-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  <MarkdownView content={previewNote.content} isDark={isDark} isModern={isModern} />
+                </div>
+
                 <div className="flex gap-1.5 flex-wrap mb-4">
                   {previewNote.tags.map((tag) => (
                     <span
@@ -630,27 +1209,31 @@ export function NotesVault({
                   <div className="mb-4">
                     <button
                       type="button"
-                      onClick={() => setShowHistory((v) => !v)}
+                      onClick={() => {
+                        setRevPage(1);
+                        setShowHistory((v) => !v);
+                      }}
                       className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
                         isHinglish
-                          ? 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/15'
+                          ? 'bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/15'
                           : isDark
                             ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200/60'
                       }`}
                     >
-                      <Clock size={14} /> {isHinglish ? 'History' : 'History'}
+                      <Clock size={14} /> History
                       <span className={`text-[11px] ${ts}`}>({previewNote.revisions.length})</span>
                     </button>
 
                     {showHistory && (
-                      <div className="mt-3 space-y-2">
-                        {previewNote.revisions.slice(0, 10).map((rev, idx) => (
+                      <>
+                        <div className="mt-3 space-y-2 max-h-72 overflow-auto pr-1">
+                        {revisionsPager.items.map((rev, idx) => (
                           <div
                             key={`${rev.editedAt}-${idx}`}
                             className={`rounded-xl p-3 border ${
                               isHinglish
-                                ? 'bg-white/60 border-rose-200/30'
+                                ? 'bg-white/60 border-indigo-200/30'
                                 : isDark
                                   ? 'bg-white/[0.03] border-white/[0.06]'
                                   : 'bg-slate-50/80 border-slate-200/50'
@@ -659,28 +1242,48 @@ export function NotesVault({
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className={`text-[12px] font-semibold ${tp} truncate`}>{rev.title || '(untitled)'}</div>
-                                <div className={`text-[11px] ${ts}`}>{isHinglish ? 'Edited' : 'Edited'} {prettyRelative(rev.editedAt)}</div>
+                                <div className={`text-[11px] ${ts}`}>Edited {prettyRelative(rev.editedAt)}</div>
                                 <div className={`text-[11px] mt-1 line-clamp-2 ${ts}`}>{rev.content}</div>
                               </div>
                               <button
                                 type="button"
-                                onClick={() => restoreRevision(rev)}
+                                onClick={() => {
+                                  if (!revisionMatchesCurrent(rev, previewNote)) restoreRevision(rev);
+                                }}
                                 className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${
                                   isDark ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]' : 'bg-white text-slate-700 hover:bg-slate-50'
                                 }`}
-                                title={isHinglish ? 'Restore' : 'Restore'}
+                                disabled={revisionMatchesCurrent(rev, previewNote)}
+                                title={revisionMatchesCurrent(rev, previewNote) ? "Already current" : "Load this version"}
                               >
-                                <RotateCcw size={14} /> {isHinglish ? 'Restore' : 'Restore'}
+                                <RotateCcw size={14} /> Restore
                               </button>
                             </div>
                           </div>
                         ))}
-                        {previewNote.revisions.length > 10 && (
-                          <div className={`text-[11px] ${ts}`}>
-                            {isHinglish ? 'More revisions saved…' : 'More revisions saved…'}
+                      </div>
+                        {revisionsPager.totalPages > 1 && (
+                          <div className="mt-2 flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => setRevPage((p) => Math.max(1, p - 1))}
+                              disabled={revisionsPager.page <= 1}
+                              className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${revisionsPager.page <= 1 ? (isDark ? 'opacity-40 cursor-not-allowed bg-white/[0.03]' : 'opacity-40 cursor-not-allowed bg-slate-50') : isDark ? 'bg-white/[0.05] hover:bg-white/[0.08] text-slate-200' : 'bg-white hover:bg-slate-50 text-slate-700'}`}
+                            >
+                              Prev
+                            </button>
+                            <div className={`text-[11px] ${ts}`}>Page {revisionsPager.page} / {revisionsPager.totalPages}</div>
+                            <button
+                              type="button"
+                              onClick={() => setRevPage((p) => Math.min(revisionsPager.totalPages, p + 1))}
+                              disabled={revisionsPager.page >= revisionsPager.totalPages}
+                              className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${revisionsPager.page >= revisionsPager.totalPages ? (isDark ? 'opacity-40 cursor-not-allowed bg-white/[0.03]' : 'opacity-40 cursor-not-allowed bg-slate-50') : isDark ? 'bg-white/[0.05] hover:bg-white/[0.08] text-slate-200' : 'bg-white hover:bg-slate-50 text-slate-700'}`}
+                            >
+                              Next
+                            </button>
                           </div>
                         )}
-                      </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -691,7 +1294,7 @@ export function NotesVault({
             <div
               className={`rounded-xl p-3 mb-4 ${
                 isHinglish
-                  ? 'bg-white/60 border border-rose-200/30'
+                  ? 'bg-white/60 border border-indigo-200/30'
                   : isDark
                     ? 'bg-white/[0.03] border border-white/[0.06]'
                     : 'bg-slate-50/80 border border-slate-200/50'
@@ -699,7 +1302,7 @@ export function NotesVault({
             >
               <div className="flex items-center justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2">
-                  <Paperclip size={14} className={isHinglish ? 'text-rose-600' : isDark ? 'text-slate-300' : 'text-slate-700'} />
+                  <Paperclip size={14} className={isHinglish ? 'text-indigo-600' : isDark ? 'text-slate-300' : 'text-slate-700'} />
                   <p className={`text-[12px] font-semibold ${tp}`}>{isHinglish ? 'Attachments' : (t('attachments', lang) ?? 'Attachments')}</p>
                   <span className={`text-[11px] ${ts}`}>({attachments.rows.length})</span>
                 </div>
@@ -711,7 +1314,7 @@ export function NotesVault({
                         ? 'bg-white/[0.03] text-slate-500'
                         : 'bg-slate-100 text-slate-400'
                       : isHinglish
-                        ? 'bg-rose-500/10 text-rose-600 hover:bg-rose-500/15'
+                        ? 'bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/15'
                         : isDark
                           ? 'bg-white/[0.05] text-slate-200 hover:bg-white/[0.08]'
                           : 'bg-white text-slate-700 hover:bg-slate-50'
