@@ -9,6 +9,7 @@ export type Page =
   | 'challenges'
   | 'shop'
   | 'leaderboard'
+  | 'focus'
   | 'profile';
 
 export interface FocusSession {
@@ -28,6 +29,18 @@ export interface BreakSession {
   endsAt: number;
   durationMs: number;
   kind: 'short' | 'long';
+}
+
+export interface FocusHistoryEntry {
+  id: string;
+  questId: string;
+  questTitle: string;
+  startedAt: number;
+  endedAt: number;
+  durationMs: number;
+  label: string;
+  xpAwarded: number;
+  day: string; // YYYY-MM-DD
 }
 
 export interface SubTask {
@@ -161,11 +174,13 @@ export const defaultQuests: Quest[] = [
   { id: '1', title: 'Complete the project proposal', difficulty: 'hard', xpReward: 50, dueDate: 'Today', status: 'active', category: 'Karma', recurring: 'none', completedAt: '', subtasks: [], badge: 'none' },
   { id: '2', title: 'Read 20 pages of Bhagavad Gita', difficulty: 'easy', xpReward: 10, dueDate: 'Today', status: 'active', category: 'Vidya', recurring: 'none', completedAt: '', subtasks: [], badge: 'none' },
   // Perfect recurring habit example + checklist
-  { id: '3', title: 'Morning Surya Namaskar – 12 rounds', difficulty: 'medium', xpReward: 25, dueDate: 'Today', status: 'active', category: 'Yoga', recurring: 'daily', completedAt: '', subtasks: [
+  {
+    id: '3', title: 'Morning Surya Namaskar – 12 rounds', difficulty: 'medium', xpReward: 25, dueDate: 'Today', status: 'active', category: 'Yoga', recurring: 'daily', completedAt: '', subtasks: [
       { id: '3-1', text: 'Warm-up (2 min)', done: false },
       { id: '3-2', text: '12 rounds', done: false },
       { id: '3-3', text: 'Cool down + water', done: false },
-    ], badge: 'none' },
+    ], badge: 'none'
+  },
   { id: '4', title: 'Design the landing page mockup', difficulty: 'hard', xpReward: 50, dueDate: 'Tomorrow', status: 'active', category: 'Karma', recurring: 'none', completedAt: '', subtasks: [], badge: 'none' },
   { id: '5', title: 'Dhyana meditation – 10 minutes', difficulty: 'easy', xpReward: 10, dueDate: 'Today', status: 'active', category: 'Sadhana', recurring: 'daily', completedAt: '', subtasks: [], badge: 'none' },
   { id: '6', title: 'Defeat the Asura of Procrastination', difficulty: 'legendary', xpReward: 100, dueDate: 'This Week', status: 'active', category: 'Boss Quest', recurring: 'weekly', completedAt: '', subtasks: [], badge: 'none' },

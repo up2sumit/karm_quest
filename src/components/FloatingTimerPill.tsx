@@ -94,8 +94,15 @@ export function FloatingTimerPill({
                   {focusActive ? focusTitle : 'Take a breather — you earned it.'}
                 </p>
               </div>
-              <div className={`shrink-0 text-[12px] font-black ${text}`}>
-                {formatMs(remaining)}
+              <div className="shrink-0 flex items-center gap-1.5">
+                <div className={`text-[12px] font-black ${text}`}>
+                  {formatMs(remaining)}
+                </div>
+                {focusActive && focusSession?.bonusXp != null && (
+                  <div className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
+                    +{focusSession.bonusXp} XP
+                  </div>
+                )}
               </div>
             </div>
           </button>
@@ -106,9 +113,8 @@ export function FloatingTimerPill({
               if (focusActive) onStopFocus();
               else onStopBreak();
             }}
-            className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
-              isDark ? 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'
-            }`}
+            className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${isDark ? 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'
+              }`}
             aria-label={focusActive ? 'Stop focus timer' : 'Skip break'}
             title={focusActive ? 'Stop' : 'Skip'}
           >

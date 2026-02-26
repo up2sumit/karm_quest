@@ -1,4 +1,5 @@
-import { Settings, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Settings, ChevronLeft, ChevronRight, X, Download } from 'lucide-react';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
 import type { Page } from '../store';
@@ -26,13 +27,14 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { page: 'dashboard'    as Page, labelKey: 'navDashboard'    as const, emoji: '🪔', hi: '🏠', pro: '🗂️' },
-  { page: 'quests'       as Page, labelKey: 'navQuests'       as const, emoji: '🏹', hi: '💪', pro: '✅' },
-  { page: 'notes'        as Page, labelKey: 'navNotes'        as const, emoji: '📜', hi: '🧠', pro: '📝' },
+  { page: 'dashboard' as Page, labelKey: 'navDashboard' as const, emoji: '🪔', hi: '🏠', pro: '🗂️' },
+  { page: 'quests' as Page, labelKey: 'navQuests' as const, emoji: '🏹', hi: '💪', pro: '✅' },
+  { page: 'notes' as Page, labelKey: 'navNotes' as const, emoji: '📜', hi: '🧠', pro: '📝' },
   { page: 'achievements' as Page, labelKey: 'navAchievements' as const, emoji: '🏆', hi: '🏆', pro: '⭐' },
-  { page: 'challenges'   as Page, labelKey: 'navChallenges'   as const, emoji: '🔱', hi: '🔥', pro: '🎯' },
-  { page: 'shop'         as Page, labelKey: 'navShop'         as const, emoji: '🛍️', hi: '🛍️', pro: '🛒' },
-  { page: 'leaderboard'  as Page, labelKey: 'navLeaderboard'  as const, emoji: '🏅', hi: '🏅', pro: '📈' },
+  { page: 'challenges' as Page, labelKey: 'navChallenges' as const, emoji: '🔱', hi: '🔥', pro: '🎯' },
+  { page: 'shop' as Page, labelKey: 'navShop' as const, emoji: '🛍️', hi: '🛍️', pro: '🛒' },
+  { page: 'leaderboard' as Page, labelKey: 'navLeaderboard' as const, emoji: '🏅', hi: '🏅', pro: '📈' },
+  { page: 'focus' as Page, labelKey: 'navFocus' as const, emoji: '⏱️', hi: '⏱️', pro: '⏱️' },
 ];
 
 function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMobileClose, allowToggle, sidebarSkin }: {
@@ -48,6 +50,7 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
   const { isHinglish, isModern, lang, theme } = useTheme();
   const skin = sidebarSkinClasses(sidebarSkin, theme);
   const settingsActive = currentPage === ('profile' as Page);
+  const { isInstallable, promptInstall } = usePWAInstall();
 
   return (
     <div className={`flex flex-col h-full m-2.5 mr-0 rounded-2xl border border-white/[0.06] shadow-2xl overflow-hidden ${skin.bg}`}>
@@ -91,13 +94,21 @@ function Panel({ currentPage, onNavigate, showExpanded, onToggle, isMobile, onMo
 
       {/* Footer */}
       <div className="px-2.5 pb-3 pt-3 space-y-1 border-t border-white/[0.06]">
+        {isInstallable && (
+          <button
+            onClick={promptInstall}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all bg-white/[0.04] text-white hover:bg-white/[0.08] shadow-sm mb-2 ${!showExpanded ? 'justify-center' : ''}`}
+          >
+            <Download size={18} />
+            {showExpanded && <span className="font-medium text-[13px]">{isHinglish ? 'App Install Karo' : 'Install App'}</span>}
+          </button>
+        )}
         <button
           onClick={() => onNavigate('profile' as Page)}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-            settingsActive
-              ? 'bg-white/[0.08] text-white shadow-sm'
-              : 'text-white/30 hover:bg-white/[0.04] hover:text-white/50'
-          } ${!showExpanded ? 'justify-center' : ''}`}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${settingsActive
+            ? 'bg-white/[0.08] text-white shadow-sm'
+            : 'text-white/30 hover:bg-white/[0.04] hover:text-white/50'
+            } ${!showExpanded ? 'justify-center' : ''}`}
         >
           <Settings size={18} />
           {showExpanded && <span className="font-medium text-[13px]">{t('navSettings', lang)}</span>}
@@ -125,7 +136,7 @@ function BottomNav({ currentPage, onNavigate }: { currentPage: Page; onNavigate:
         const active = currentPage === item.page;
         // Token-driven so Theme 1 uses saffron/orange, Theme 3 uses blue/violet, Theme 4 uses indigo.
         const activeCl = 'text-[var(--kq-primary)]';
-        const dotCl    = 'bg-[var(--kq-primary)]';
+        const dotCl = 'bg-[var(--kq-primary)]';
         return (
           <button key={item.page} onClick={() => onNavigate(item.page)} aria-current={active ? 'page' : undefined}
             className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KarmQuest - Architectural Roadmap</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&family=Inter:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        kq: {
+                            bg: '#0f172a',
+                            surface: 'rgba(30, 41, 59, 0.6)',
+                            border: 'rgba(255, 255, 255, 0.1)',
+                            primary: '#f97316',
+                            highlight: '#fb923c'
+                        }
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(249, 115, 22, 0.3);
+            box-shadow: 0 30px 60px -15px rgba(249, 115, 22, 0.15);
+        }
+
+        .ambient-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(120px);
+            z-index: -1;
+            opacity: 0.4;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #fb923c, #fef08a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+
+<body class="antialiased min-h-screen py-16 px-4 sm:px-8 relative">
+
+    <!-- Ambient Glowing Background Orbs -->
+    <div class="ambient-orb bg-orange-600 w-[500px] h-[500px] top-[-100px] left-[-200px] animate-pulse-slow"></div>
+    <div class="ambient-orb bg-indigo-600 w-[600px] h-[600px] bottom-[-200px] right-[-100px] animate-float"></div>
+    <div class="ambient-orb bg-emerald-700 w-[300px] h-[300px] top-[40%] left-[50%] opacity-20 hidden md:block"></div>
+
+    <div class="max-w-6xl mx-auto">
+
+        <!-- Header -->
+        <header class="text-center mb-20 animate-fade-in-up">
+            <div
+                class="inline-block px-4 py-1.5 rounded-full border border-orange-500/30 bg-orange-500/10 text-orange-400 text-sm font-semibold tracking-widest uppercase mb-6 shadow-[0_0_15px_rgba(249,115,22,0.2)]">
+                Technical Evolution
+            </div>
+            <h1 class="font-display font-black text-5xl md:text-7xl mb-6 tracking-tight">
+                KarmQuest <br class="hidden md:block" />
+                <span class="gradient-text">Architecture Roadmap</span>
+            </h1>
+            <p class="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto font-light">
+                A strategic blueprint to transition KarmQuest from a monolithic application into a highly scalable,
+                enterprise-grade React powerhouse.
+            </p>
+        </header>
+
+        <!-- Timeline Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
+
+            <!-- Step 1 -->
+            <div class="glass-card rounded-3xl p-8 relative overflow-hidden group">
+                <div
+                    class="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110 blur-xl">
+                </div>
+                <div
+                    class="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 text-white font-display font-bold text-2xl mb-6 shadow-lg shadow-orange-500/30">
+                    1
+                </div>
+                <h3 class="font-display font-bold text-2xl text-white mb-3">Global State Management</h3>
+                <p class="text-slate-400 mb-6 leading-relaxed">
+                    Migrate the "Source of Truth" from <code
+                        class="bg-slate-800 text-orange-300 px-2 py-0.5 rounded text-sm">App.tsx</code> to a dedicated
+                    state manager like <strong>Zustand</strong>. This eliminates prop drilling entirely, drastically
+                    reducing re-renders and making components completely autonomous.
+                </p>
+                <div class="p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
+                    <div class="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2">Impact</div>
+                    <div class="text-emerald-400 font-medium">Lightning-fast UI · Zero Prop Drilling</div>
+                </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="glass-card rounded-3xl p-8 relative overflow-hidden group lg:translate-y-12">
+                <div
+                    class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110 blur-xl">
+                </div>
+                <div
+                    class="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-400 to-indigo-600 text-white font-display font-bold text-2xl mb-6 shadow-lg shadow-indigo-500/30">
+                    2
+                </div>
+                <h3 class="font-display font-bold text-2xl text-white mb-3">Extract Logic into Hooks</h3>
+                <p class="text-slate-400 mb-6 leading-relaxed">
+                    Decouple heavy business logic (XP calculations, achievements checking, focus timers) from UI
+                    components. Move them into custom, testable handlers like <code
+                        class="bg-slate-800 text-indigo-300 px-2 py-0.5 rounded text-sm">useLeveling.ts</code>.
+                </p>
+                <div class="p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
+                    <div class="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2">Impact</div>
+                    <div class="text-emerald-400 font-medium">Clean JSX · Testable Business Logic</div>
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="glass-card rounded-3xl p-8 relative overflow-hidden group">
+                <div
+                    class="absolute top-0 right-0 w-32 h-32 bg-cyan-500/20 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110 blur-xl">
+                </div>
+                <div
+                    class="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-cyan-600 text-white font-display font-bold text-2xl mb-6 shadow-lg shadow-cyan-500/30">
+                    3
+                </div>
+                <h3 class="font-display font-bold text-2xl text-white mb-3">Implement React Router</h3>
+                <p class="text-slate-400 mb-6 leading-relaxed">
+                    Transition from variable-based tab switching to genuine URL routing using <strong>React Router
+                        DOM</strong>. This enables deep linking, native browser back/forward navigation, and shareable
+                    routes like <code
+                        class="bg-slate-800 text-cyan-300 px-2 py-0.5 rounded text-sm">/leaderboard</code>.
+                </p>
+                <div class="p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
+                    <div class="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2">Impact</div>
+                    <div class="text-emerald-400 font-medium">Sharable Links · Native Navigation</div>
+                </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="glass-card rounded-3xl p-8 relative overflow-hidden group lg:translate-y-12">
+                <div
+                    class="absolute top-0 right-0 w-32 h-32 bg-pink-500/20 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110 blur-xl">
+                </div>
+                <div
+                    class="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-400 to-pink-600 text-white font-display font-bold text-2xl mb-6 shadow-lg shadow-pink-500/30">
+                    4
+                </div>
+                <h3 class="font-display font-bold text-2xl text-white mb-3">Break Down App.tsx</h3>
+                <p class="text-slate-400 mb-6 leading-relaxed">
+                    Shatter the monolith. With routing and state management in place, divide <code
+                        class="bg-slate-800 text-pink-300 px-2 py-0.5 rounded text-sm">App.tsx</code> into discrete
+                    Route Components (e.g., <code
+                        class="bg-slate-800 text-pink-300 px-2 py-0.5 rounded text-sm">DashboardPage.tsx</code>). <code
+                        class="bg-slate-800 text-pink-300 px-2 py-0.5 rounded text-sm">App.tsx</code> becomes just a
+                    thin provider wrapper.
+                </p>
+                <div class="p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
+                    <div class="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2">Impact</div>
+                    <div class="text-emerald-400 font-medium">Highly Maintainable · Reduced File Sizes</div>
+                </div>
+            </div>
+
+            <!-- Step 5 (Full Width) -->
+            <div class="glass-card rounded-3xl p-8 relative overflow-hidden group md:col-span-2 mt-8 lg:mt-24">
+                <div
+                    class="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-105 blur-2xl">
+                </div>
+                <div class="flex flex-col md:flex-row gap-8 items-center relative z-10">
+                    <div class="flex-shrink-0">
+                        <div
+                            class="flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-display font-black text-4xl shadow-[0_0_30px_rgba(52,211,153,0.4)] border-4 border-slate-800">
+                            5
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-display font-bold text-3xl text-white mb-4">Standardize Database Sync</h3>
+                        <p class="text-slate-400 text-lg leading-relaxed mb-6">
+                            Construct a unified synchronization middleware. Every action dispatched mapped automatically
+                            against Supabase API and LocalStorage queues. Offline data resolves transparently when back
+                            online, cementing the ultimate <strong>Offline-First Serverless architecture</strong>.
+                        </p>
+                        <div
+                            class="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold tracking-wide">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Enterprise Grade Resilience
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-32 text-center text-slate-500 pb-8">
+            <div class="w-16 h-1 bg-slate-800 rounded-full mx-auto mb-6"></div>
+            <p class="font-display tracking-widest uppercase text-xs font-bold text-slate-600">KarmQuest Development
+                Diagnostics</p>
+        </footer>
+
+    </div>
+
+</body>
+
+</html>

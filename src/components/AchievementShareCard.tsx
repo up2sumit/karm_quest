@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, Share2, X, Sparkles } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import type { Achievement, UserStats } from '../store';
+import { shareCardAsImage } from '../utils/shareCardAsImage';
 
 type Props = {
   achievement: Achievement | null;
@@ -14,6 +15,8 @@ export function AchievementShareCard({ achievement, stats, open, onClose }: Prop
   const { isDark, isHinglish, isModern, lang } = useTheme();
   const isPro = lang === 'pro';
   const [toast, setToast] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -50,17 +53,20 @@ export function AchievementShareCard({ achievement, stats, open, onClose }: Prop
   };
 
   const nativeShare = async () => {
+    setSharing(true);
     try {
-      if (!('share' in navigator)) {
-        await copy();
-        return;
-      }
-      await (navigator as any).share({
-        title: achievement?.title || 'Achievement unlocked',
-        text: shareText,
-      });
+      const result = await shareCardAsImage(
+        cardRef.current,
+        `karmquest-${achievement?.title?.replace(/\s+/g, '-').toLowerCase() || 'achievement'}.png`,
+        achievement?.title || 'Achievement unlocked'
+      );
+      if (result === 'shared') setToast('Shared ✅');
+      else if (result === 'downloaded') setToast('Image saved ✅');
+      else setToast('Share failed');
     } catch {
-      // user cancelled or not supported
+      setToast('Share failed');
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -103,7 +109,7 @@ export function AchievementShareCard({ achievement, stats, open, onClose }: Prop
         </div>
 
         {/* Shareable visual */}
-        <div className={`mx-5 mb-5 rounded-3xl text-white overflow-hidden shadow-xl ${grad}`}>
+        <div ref={cardRef} className={`mx-5 mb-5 rounded-3xl text-white overflow-hidden shadow-xl ${grad}`}>
           <div className="relative p-6">
             <div className="absolute inset-0 opacity-[0.10]">
               <div className="absolute -top-20 -right-16 w-64 h-64 rounded-full bg-[var(--kq-surface)]/20 blur-2xl" />
@@ -155,29 +161,28 @@ export function AchievementShareCard({ achievement, stats, open, onClose }: Prop
 
         {/* Actions */}
         <div className="px-5 pb-5 flex items-center justify-between gap-3">
-          <div className={`text-[11px] ${ts} line-clamp-2`}>{toast ? toast : 'Tip: take a screenshot of the card above.'}</div>
+          <div className={`text-[11px] ${ts} line-clamp-2`}>{toast ? toast : 'Share as image to any platform.'}</div>
           <div className="flex items-center gap-2">
             <button
-              className={`inline-flex items-center gap-2 px-3 py-2 rounded-2xl text-[12px] font-semibold border transition-all ${
-                isModern
-                  ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)] hover:bg-[var(--kq-surface)]'
-                  : isDark
-                    ? 'bg-[var(--kq-surface)]/[0.04] border-white/[0.06] text-slate-200 hover:bg-[var(--kq-surface)]/[0.06]'
-                    : 'bg-[var(--kq-surface)] border-[var(--kq-border)]/50 text-[var(--kq-text-secondary)] hover:bg-[var(--kq-bg2)]'
-              }`}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded-2xl text-[12px] font-semibold border transition-all ${isModern
+                ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)] hover:bg-[var(--kq-surface)]'
+                : isDark
+                  ? 'bg-[var(--kq-surface)]/[0.04] border-white/[0.06] text-slate-200 hover:bg-[var(--kq-surface)]/[0.06]'
+                  : 'bg-[var(--kq-surface)] border-[var(--kq-border)]/50 text-[var(--kq-text-secondary)] hover:bg-[var(--kq-bg2)]'
+                }`}
               onClick={copy}
             >
               <Copy size={14} /> Copy
             </button>
             <button
-              className={`inline-flex items-center gap-2 px-3 py-2 rounded-2xl text-[12px] font-semibold transition-all ${
-                isModern
-                  ? 'bg-[var(--kq-primary)] text-white hover:opacity-95'
-                  : 'bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)] text-white hover:opacity-95'
-              }`}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded-2xl text-[12px] font-semibold transition-all ${isModern
+                ? 'bg-[var(--kq-primary)] text-white hover:opacity-95'
+                : 'bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)] text-white hover:opacity-95'
+                }`}
               onClick={nativeShare}
             >
-              <Share2 size={14} /> Share
+              <Share2 size={14} />
+              {sharing ? 'Sharing…' : 'Share'}
             </button>
           </div>
         </div>
