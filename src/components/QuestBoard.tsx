@@ -262,7 +262,7 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
   const [selectedISO, setSelectedISO] = useState<string>(todayISO());
   const [newTitle, setNewTitle] = useState('');
   const [newDifficulty, setNewDifficulty] = useState<Difficulty>('easy');
-  const [newCategory, setNewCategory] = useState('Karma');
+  const [newCategory, setNewCategory] = useState(() => 'Karma');
   const [newDueDate, setNewDueDate] = useState<string>(todayISO()); // real ISO date, defaults to today
   const [showPowerFields, setShowPowerFields] = useState(false);
   const [newRecurring, setNewRecurring] = useState<Recurrence>('none');
@@ -273,14 +273,53 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [subtaskDraft, setSubtaskDraft] = useState<string>('');
 
+  // ── Theme-aware categories ────────────────────────────────────────────────
+  type CategoryConfig = { id: string; label: string; emoji: string; color: string; bg: string; darkBg: string };
+  const categoryConfigs: CategoryConfig[] = useMemo(() => {
+    if (isModern) {
+      // Theme 2: Field Notes — professional / minimal
+      return [
+        { id: 'Work', label: 'Work', emoji: '💼', color: 'text-teal-600', bg: 'bg-teal-50', darkBg: 'bg-teal-500/10' },
+        { id: 'Study', label: 'Study', emoji: '📖', color: 'text-blue-600', bg: 'bg-blue-50', darkBg: 'bg-blue-500/10' },
+        { id: 'Wellness', label: 'Wellness', emoji: '🧘', color: 'text-emerald-600', bg: 'bg-emerald-50', darkBg: 'bg-emerald-500/10' },
+        { id: 'Routine', label: 'Routine', emoji: '🔄', color: 'text-amber-600', bg: 'bg-amber-50', darkBg: 'bg-amber-500/10' },
+        { id: 'Creative', label: 'Creative', emoji: '🎨', color: 'text-pink-600', bg: 'bg-pink-50', darkBg: 'bg-pink-500/10' },
+        { id: 'Personal', label: 'Personal', emoji: '🏠', color: 'text-slate-600', bg: 'bg-slate-50', darkBg: 'bg-slate-500/10' },
+      ];
+    }
+    if (isHinglish) {
+      // Theme 4: Indigo Dark — casual Hindi-English
+      return [
+        { id: 'Kaam-Dhaam', label: 'Kaam-Dhaam', emoji: '💪', color: 'text-indigo-400', bg: 'bg-indigo-50', darkBg: 'bg-indigo-500/10' },
+        { id: 'Padhai', label: 'Padhai', emoji: '📚', color: 'text-cyan-400', bg: 'bg-cyan-50', darkBg: 'bg-cyan-500/10' },
+        { id: 'Yoga', label: 'Yoga', emoji: '🧘', color: 'text-emerald-400', bg: 'bg-emerald-50', darkBg: 'bg-emerald-500/10' },
+        { id: 'Hustle', label: 'Hustle', emoji: '🔥', color: 'text-orange-400', bg: 'bg-orange-50', darkBg: 'bg-orange-500/10' },
+        { id: 'Creative', label: 'Creative', emoji: '🎨', color: 'text-pink-400', bg: 'bg-pink-50', darkBg: 'bg-pink-500/10' },
+        { id: 'Ghar-Wala', label: 'Ghar-Wala', emoji: '🏠', color: 'text-violet-400', bg: 'bg-violet-50', darkBg: 'bg-violet-500/10' },
+      ];
+    }
+    // Theme 1 (Saffron Light) & Theme 3 (Chakra Rings) — original Indian names
+    return [
+      { id: 'Karma', label: 'Karma', emoji: '🏹', color: 'text-amber-600', bg: 'bg-amber-50', darkBg: 'bg-amber-500/10' },
+      { id: 'Vidya', label: 'Vidya', emoji: '📜', color: 'text-blue-600', bg: 'bg-blue-50', darkBg: 'bg-blue-500/10' },
+      { id: 'Yoga', label: 'Yoga', emoji: '🧘', color: 'text-emerald-600', bg: 'bg-emerald-50', darkBg: 'bg-emerald-500/10' },
+      { id: 'Sadhana', label: 'Sadhana', emoji: '🪔', color: 'text-orange-600', bg: 'bg-orange-50', darkBg: 'bg-orange-500/10' },
+      { id: 'Creative', label: 'Creative', emoji: '🎨', color: 'text-pink-600', bg: 'bg-pink-50', darkBg: 'bg-pink-500/10' },
+      { id: 'Griha', label: 'Griha', emoji: '🏠', color: 'text-slate-600', bg: 'bg-slate-50', darkBg: 'bg-slate-500/10' },
+    ];
+  }, [isModern, isHinglish]);
+
+  const getCategoryConfig = (id: string) => categoryConfigs.find((c) => c.id === id);
+
+
   // Focus duration preset (configurable Pomodoro lengths)
   const focusPresets = useMemo(
     () => [
-      { id: 'sprint', label: 'Sprint', minutes: 5 },
+      { id: 'test', label: 'Test', minutes: 1 },
       { id: 'quick', label: 'Quick Focus', minutes: 15 },
       { id: 'pomodoro', label: 'Pomodoro', minutes: 25 },
-      { id: 'deep', label: 'Deep Work', minutes: 50 },
-      { id: 'flow', label: 'Flow State', minutes: 90 },
+      { id: 'deep', label: 'Deep Work', minutes: 45 },
+      { id: 'marathon', label: 'Marathon', minutes: 60 },
     ].map((p) => ({ ...p, durationMs: p.minutes * 60_000 })),
     []
   );
@@ -665,36 +704,63 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
                 </div>
 
                 {/* Category */}
-                <div className="space-y-1">
-                  <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Category</label>
+                <div className="space-y-1.5">
+                  <label className={`text-[11px] font-semibold ${isModern ? 'text-[var(--kq-text-muted)]' : isDark ? 'text-slate-500' : 'text-slate-500'}`}>Category</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {categoryConfigs.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setEditCategory(cat.id)}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${editCategory === cat.id
+                          ? `${darkLike ? cat.darkBg : cat.bg} ${cat.color} ring-1 ring-current/20 shadow-sm`
+                          : darkLike
+                            ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
+                            : isModern
+                              ? 'bg-[var(--kq-bg2)] text-[var(--kq-text-muted)] hover:bg-[var(--kq-bg3)]'
+                              : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                          }`}
+                      >
+                        <span className="text-xs">{cat.emoji}</span>
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
                   <input
                     value={editCategory}
                     onChange={(e) => setEditCategory(e.target.value)}
-                    list="kq-category-list"
-                    className={`w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
-                    placeholder="Karma / Vidya / Yoga…"
+                    className={`w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 mt-1 ${inputCls}`}
+                    placeholder={isModern ? 'Or type a custom category…' : isHinglish ? 'Ya custom category likho…' : 'Or type a custom category…'}
                   />
-                  <datalist id="kq-category-list">
-                    {['Karma', 'Vidya', 'Yoga', 'Sadhana', 'Creative', 'Griha'].map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
                 </div>
 
                 {/* Due date */}
-                <div className="space-y-1">
-                  <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Due date</label>
+                <div className="space-y-1.5">
+                  <label className={`text-[11px] font-semibold flex items-center gap-1.5 ${isModern ? 'text-[var(--kq-text-muted)]' : isDark ? 'text-slate-500' : 'text-slate-500'
+                    }`}>
+                    <CalendarDays size={12} className={isModern ? 'text-[var(--kq-primary)]' : isHinglish ? 'text-indigo-400' : 'text-amber-500'} />
+                    Due date
+                  </label>
                   <div className="flex items-center gap-2">
                     <input
                       type="date"
                       value={editDueDate}
                       onChange={(e) => setEditDueDate(e.target.value)}
-                      className={`flex-1 px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                      className={`flex-1 px-3.5 py-2 rounded-xl border-2 text-[12px] font-medium focus:outline-none focus:ring-2 cursor-pointer transition-all ${isModern
+                        ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)] focus:border-[var(--kq-primary)] focus:ring-[var(--kq-primary)]/20'
+                        : darkLike
+                          ? 'bg-white/[0.04] border-white/[0.08] text-slate-200 focus:border-indigo-500/40 focus:ring-indigo-500/20'
+                          : 'bg-white border-slate-200/80 text-slate-700 focus:border-amber-400 focus:ring-amber-300/20 shadow-sm'
+                        }`}
                       style={{ colorScheme: isDark ? 'dark' : 'light' }}
                     />
                     <button
                       onClick={() => setEditDueDate('')}
-                      className={`px-3 py-2 rounded-xl text-[12px] font-semibold ${isDark ? 'bg-white/[0.06] text-slate-200 hover:bg-white/[0.08]' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      className={`px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${isModern
+                        ? 'bg-[var(--kq-bg2)] text-[var(--kq-text-secondary)] hover:bg-[var(--kq-bg3)]'
+                        : isDark
+                          ? 'bg-white/[0.06] text-slate-200 hover:bg-white/[0.08]'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       title="Clear due date"
                     >
@@ -955,42 +1021,51 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
                 </div>
               </div>
 
-              {/* Category */}
-              <div className="space-y-1">
+              {/* Category — pill buttons */}
+              <div className="space-y-1.5">
                 <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   {t('category', lang)}
                 </label>
-                <select
-                  value={newCategory}
-                  onChange={e => setNewCategory(e.target.value)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] border focus:outline-none focus:ring-2 ${inputCls}`}
-                >
-                  {['Karma', 'Vidya', 'Yoga', 'Sadhana', 'Creative', 'Griha'].map(c => (
-                    <option key={c} value={c}>{c}</option>
+                <div className="flex gap-1.5 flex-wrap">
+                  {categoryConfigs.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setNewCategory(cat.id)}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${newCategory === cat.id
+                        ? `${darkLike ? cat.darkBg : cat.bg} ${cat.color} ring-1 ring-current/20 shadow-sm`
+                        : darkLike
+                          ? 'bg-white/[0.03] text-slate-500 hover:bg-white/[0.06]'
+                          : isModern
+                            ? 'bg-[var(--kq-bg2)] text-[var(--kq-text-muted)] hover:bg-[var(--kq-bg3)]'
+                            : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                        }`}
+                    >
+                      <span className="text-xs">{cat.emoji}</span>
+                      {cat.label}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
-              {/* ── Due Date Picker (NEW) ───────────────────────────────────
-                   Replaces the hardcoded "Today" string.
-                   - Uses <input type="date"> for native browser date picker
-                   - allows past dates (retroactive logging)
-                   - Shows the CalendarDays icon as a prefix hint
-              ──────────────────────────────────────────────────────────────── */}
-              <div className="space-y-1">
-                <label className={`text-[11px] font-medium flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  <CalendarDays size={11} />
+              {/* ── Due Date Picker ────────────────────────────────────────── */}
+              <div className="space-y-1.5">
+                <label className={`text-[11px] font-medium flex items-center gap-1.5 ${isModern ? 'text-[var(--kq-text-muted)]' : isDark ? 'text-slate-400' : 'text-slate-500'
+                  }`}>
+                  <CalendarDays size={12} className={isModern ? 'text-[var(--kq-primary)]' : isHinglish ? 'text-indigo-400' : 'text-amber-500'} />
                   {t('dueDateLabel', lang)}
                 </label>
                 <input
                   type="date"
                   value={newDueDate}
                   onChange={e => setNewDueDate(e.target.value)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] border focus:outline-none focus:ring-2 cursor-pointer ${inputCls}`}
-                  style={{
-                    // Force the date input text to match the surrounding UI
-                    colorScheme: isDark ? 'dark' : 'light',
-                  }}
+                  className={`px-3.5 py-2 rounded-xl text-[12px] border-2 font-medium focus:outline-none focus:ring-2 cursor-pointer transition-all ${isModern
+                    ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)] focus:border-[var(--kq-primary)] focus:ring-[var(--kq-primary)]/20'
+                    : darkLike
+                      ? 'bg-white/[0.04] border-white/[0.08] text-slate-200 focus:border-indigo-500/40 focus:ring-indigo-500/20'
+                      : 'bg-white border-slate-200/80 text-slate-700 focus:border-amber-400 focus:ring-amber-300/20 shadow-sm'
+                    }`}
+                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
                 />
               </div>
             </div>
@@ -1222,8 +1297,15 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
                           : tp
                           }`}>{q.title}</p>
                         <div className="mt-1 flex items-center gap-2 flex-wrap">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isDark ? 'bg-white/[0.03] border border-white/[0.05] text-slate-400' : 'bg-slate-100 text-slate-600'
-                            }`}>{q.category}</span>
+                          {(() => {
+                            const cc = getCategoryConfig(q.category); return cc ? (
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${darkLike ? cc.darkBg : cc.bg} ${cc.color}`}>
+                                <span>{cc.emoji}</span>{cc.label}
+                              </span>
+                            ) : (
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isDark ? 'bg-white/[0.03] border border-white/[0.05] text-slate-400' : 'bg-slate-100 text-slate-600'}`}>{q.category}</span>
+                            );
+                          })()}
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
                           <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>+{q.xpReward} XP</span>
                         </div>
@@ -1374,10 +1456,17 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
                         />
 
                         {/* Category */}
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-white/[0.03] text-slate-500' : 'bg-slate-50 text-slate-500'
-                          }`}>
-                          {quest.category}
-                        </span>
+                        {(() => {
+                          const cc = getCategoryConfig(quest.category); return cc ? (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${darkLike ? cc.darkBg : cc.bg} ${cc.color}`}>
+                              <span>{cc.emoji}</span>{cc.label}
+                            </span>
+                          ) : (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-white/[0.03] text-slate-500' : 'bg-slate-50 text-slate-500'}`}>
+                              {quest.category}
+                            </span>
+                          );
+                        })()}
 
                         {/* Focus status */}
                         {focusOnThis && quest.status === 'active' && (

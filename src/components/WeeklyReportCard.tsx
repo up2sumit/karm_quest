@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Copy, X, Calendar, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Copy, Share2, X, Calendar, Sparkles } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import type { WeeklyReport } from '../store';
+import { shareCardAsImage } from '../utils/shareCardAsImage';
 
 type Props = {
   report: WeeklyReport;
@@ -20,6 +21,8 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
 
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!autoOpen) return;
@@ -233,10 +236,10 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
             <button
               onClick={() => setOpen(true)}
               className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all ${isModern
-                  ? 'bg-[var(--kq-primary-soft)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] hover:bg-[var(--kq-primary-soft)]'
-                  : isDark
-                    ? 'bg-white/[0.03] text-slate-200 hover:bg-white/[0.05]'
-                    : 'bg-slate-900/5 text-slate-700 hover:bg-slate-900/10'
+                ? 'bg-[var(--kq-primary-soft)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] hover:bg-[var(--kq-primary-soft)]'
+                : isDark
+                  ? 'bg-white/[0.03] text-slate-200 hover:bg-white/[0.05]'
+                  : 'bg-slate-900/5 text-slate-700 hover:bg-slate-900/10'
                 }`}
             >
               Open
@@ -284,26 +287,52 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
                   </div>
 
                   <div className="w-full flex justify-center">
-                    <div className="w-full max-w-[560px]">
+                    <div ref={cardRef} className="w-full max-w-[560px]">
                       <CardVisual />
                     </div>
                   </div>
 
                   <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <p className={`text-[11px] ${ts}`}>
-                      {isPro ? 'Tip: screenshot the card to share it.' : isHinglish ? 'Tip: Is card ka screenshot lo aur WhatsApp/Instagram pe share karo.' : 'Tip: Take a screenshot of the card and share on WhatsApp/Instagram.'}
+                      {isPro ? 'Share as image to any platform.' : isHinglish ? 'Image download karo ya direct share karo' : 'Share as image to WhatsApp, Instagram & more.'}
                     </p>
                     <div className="flex items-center gap-2 justify-end">
                       <button
                         onClick={copy}
                         className={`px-3 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition-all ${isModern
-                            ? 'bg-[var(--kq-primary-soft)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] hover:bg-[var(--kq-primary-soft)]'
-                            : isDark
-                              ? 'bg-white/[0.03] text-slate-200 hover:bg-white/[0.05]'
-                              : 'bg-slate-900/5 text-slate-700 hover:bg-slate-900/10'
+                          ? 'bg-[var(--kq-primary-soft)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] hover:bg-[var(--kq-primary-soft)]'
+                          : isDark
+                            ? 'bg-white/[0.03] text-slate-200 hover:bg-white/[0.05]'
+                            : 'bg-slate-900/5 text-slate-700 hover:bg-slate-900/10'
                           }`}
                       >
                         <Copy size={14} /> Copy text
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setSharing(true);
+                          try {
+                            const result = await shareCardAsImage(
+                              cardRef.current,
+                              `karmquest-weekly-${report.weekStart}.png`,
+                              'KarmQuest Weekly Report'
+                            );
+                            if (result === 'shared') setToast('Shared ✅');
+                            else if (result === 'downloaded') setToast('Image saved ✅');
+                            else setToast('Share failed');
+                          } catch {
+                            setToast('Share failed');
+                          } finally {
+                            setSharing(false);
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition-all ${isModern
+                          ? 'bg-[var(--kq-primary)] text-white hover:opacity-95'
+                          : 'bg-gradient-to-r from-[var(--kq-xp-start)] to-[var(--kq-xp-end)] text-white hover:opacity-95'
+                          }`}
+                      >
+                        <Share2 size={14} />
+                        {sharing ? 'Sharing…' : 'Share'}
                       </button>
                     </div>
                   </div>
@@ -315,10 +344,10 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
                 <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[110]">
                   <div
                     className={`px-4 py-2 rounded-full text-[12px] font-semibold shadow-lg ${isModern
-                        ? 'bg-[var(--kq-surface)] text-[var(--kq-text-primary)] border border-[var(--kq-border)]'
-                        : isDark
-                          ? 'bg-white/[0.06] text-slate-200 border border-white/[0.08]'
-                          : 'bg-white text-slate-800 border border-slate-200'
+                      ? 'bg-[var(--kq-surface)] text-[var(--kq-text-primary)] border border-[var(--kq-border)]'
+                      : isDark
+                        ? 'bg-white/[0.06] text-slate-200 border border-white/[0.08]'
+                        : 'bg-white text-slate-800 border border-slate-200'
                       }`}
                   >
                     {toast}
@@ -327,8 +356,9 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
               ) : null}
             </div>
           </div>
-        </div>
-      ) : null}
+        </div >
+      ) : null
+      }
     </>
   );
 }

@@ -76,16 +76,14 @@
 .kq-tape-top {
   height: 6px;
   border-radius: 3px 3px 0 0;
-  background: linear-gradient(
-    90deg,
-    var(--crimson),
-    var(--saffron),
-    var(--turmeric),
-    var(--teal),
-    var(--indigo),
-    var(--pink),
-    var(--crimson)
-  );
+  background: linear-gradient(90deg,
+      var(--crimson),
+      var(--saffron),
+      var(--turmeric),
+      var(--teal),
+      var(--indigo),
+      var(--pink),
+      var(--crimson));
   background-size: 200%;
   animation: kq-tape-scroll 4s linear infinite;
 }
@@ -112,24 +110,28 @@
   border-style: solid;
   opacity: 0.6;
 }
+
 .kq-c-tl {
   top: 6px;
   left: 0;
   border-width: 3px 0 0 3px;
   border-radius: 4px 0 0 0;
 }
+
 .kq-c-tr {
   top: 6px;
   right: 0;
   border-width: 3px 3px 0 0;
   border-radius: 0 4px 0 0;
 }
+
 .kq-c-bl {
   bottom: 0;
   left: 0;
   border-width: 0 0 3px 3px;
   border-radius: 0 0 0 4px;
 }
+
 .kq-c-br {
   bottom: 0;
   right: 0;
@@ -323,12 +325,15 @@
 .kq-str-b.s1 {
   background: var(--crimson);
 }
+
 .kq-str-b.s2 {
   background: var(--saffron);
 }
+
 .kq-str-b.s3 {
   background: var(--turmeric);
 }
+
 .kq-str-b.s4 {
   background: var(--teal);
 }
@@ -480,6 +485,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .kq-rangoli-svg,
   .kq-tape-top {
     animation: none !important;
@@ -493,16 +499,16 @@ html[data-kq-theme="modern"] .kq-auth {
   --card: var(--kq-surface);
   --ink: var(--kq-text-primary);
   --muted: var(--kq-text-secondary);
-  --border: rgba(36,36,36,0.12);
-  --shadow: rgba(0,0,0,0.08);
+  --border: rgba(36, 36, 36, 0.12);
+  --shadow: rgba(0, 0, 0, 0.08);
 
   background: var(--kq-bg);
   font-family: var(--kq-font-body, 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
 }
 
 html[data-kq-theme="modern"] .kq-badge {
-  background: rgba(31,94,90,0.10);
-  border-color: rgba(31,94,90,0.25);
+  background: rgba(31, 94, 90, 0.10);
+  border-color: rgba(31, 94, 90, 0.25);
   color: var(--kq-primary);
 }
 
@@ -518,7 +524,7 @@ html[data-kq-theme="modern"] .kq-tape-top {
 
 html[data-kq-theme="modern"] .kq-card {
   border-radius: 20px;
-  box-shadow: 0 18px 40px rgba(0,0,0,0.10), 0 0 0 1px rgba(36,36,36,0.10);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(36, 36, 36, 0.10);
 }
 
 html[data-kq-theme="modern"] .kq-corner {
@@ -535,7 +541,7 @@ html[data-kq-theme="modern"] .kq-brand-icon {
 }
 
 html[data-kq-theme="modern"] .kq-tabs {
-  border: 1px solid rgba(36,36,36,0.12);
+  border: 1px solid rgba(36, 36, 36, 0.12);
 }
 
 html[data-kq-theme="modern"] .kq-tab {
@@ -543,13 +549,13 @@ html[data-kq-theme="modern"] .kq-tab {
 }
 
 html[data-kq-theme="modern"] .kq-tab.on {
-  background: rgba(31,94,90,0.10);
-  border-color: rgba(31,94,90,0.25);
+  background: rgba(31, 94, 90, 0.10);
+  border-color: rgba(31, 94, 90, 0.25);
   color: var(--kq-text-primary);
 }
 
 html[data-kq-theme="modern"] .kq-input {
-  border-color: rgba(36,36,36,0.12);
+  border-color: rgba(36, 36, 36, 0.12);
 }
 
 html[data-kq-theme="modern"] .kq-btn.primary {
