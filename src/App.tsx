@@ -6,6 +6,7 @@ import { OfflineSyncBootstrap } from './components/OfflineSyncBootstrap';
 import { useSupabaseProfile } from './hooks/useSupabaseProfile';
 import { useSupabaseUserState } from './hooks/useSupabaseUserState';
 import { useSupabaseTasksSync } from './hooks/useSupabaseTasksSync';
+import { useSupabaseFocusSync } from './hooks/useSupabaseFocusSync';
 import { useSupabaseInAppNotifications } from './hooks/useSupabaseInAppNotifications';
 import { Sidebar } from './components/Sidebar';
 import { TopNav } from './components/TopNav';
@@ -19,10 +20,11 @@ import { Challenges } from './components/Challenges';
 import { MudraShop } from './components/MudraShop';
 import { ProfilePage } from './components/ProfilePage';
 import { LeaderboardPage } from './components/LeaderboardPage';
+import { FocusSessionHistory } from './components/FocusSessionHistory';
 import { PublicProfilePage } from './components/PublicProfilePage';
 import { LevelUpOverlay, type LevelUpData } from './components/LevelUpOverlay';
 import { t } from './i18n';
-import type { Page, Quest, Note, NoteRevision, UserStats, Achievement, AchievementCriteria, Difficulty, Recurrence, SubTask, FocusSession, BreakSession, WeeklyReport } from './store';
+import type { Page, Quest, Note, NoteRevision, UserStats, Achievement, AchievementCriteria, Difficulty, Recurrence, SubTask, FocusSession, BreakSession, FocusHistoryEntry, WeeklyReport } from './store';
 import { defaultQuests, defaultNotes, defaultAchievements, todayISO, yesterdayISO, noteColors, addDaysISO } from './store';
 import type { AppNotification } from './notifications';
 import { defaultNotifications, makeNotification } from './notifications';
@@ -139,7 +141,7 @@ function SubtlePattern() {
 }
 
 function XPPopup({ xp, kind, onDone }: { xp: number; kind: 'quest' | 'focus'; onDone: () => void }) {
-  const { isDark, isHinglish, isModern, lang } = useTheme();
+  const { isHinglish, isModern, lang } = useTheme();
   useEffect(() => {
     const timer = setTimeout(onDone, 2000);
     return () => clearTimeout(timer);
@@ -342,7 +344,7 @@ function applyRecurringResets(list: Quest[]): Quest[] {
 }
 
 function AppContent() {
-  const { isDark, isHinglish, isModern, lang, theme, setTheme } = useTheme();
+  const { isDark, isHinglish, lang, theme, setTheme } = useTheme();
   const isPro = lang === 'pro';
   const xpWord = (isPro || isHinglish) ? 'XP' : 'Punya';
   const coinWord = isPro ? 'coins' : isHinglish ? 'Mudra' : 'Mudras';
@@ -501,6 +503,7 @@ function AppContent() {
   const [stats, setStats] = useState<UserStats>(defaultStats);
   const [shop, setShop] = useState<ShopState>(defaultShopState);
   const [sfxEnabled, setSfxEnabled] = useState<boolean>(true);
+  const [focusHistory, setFocusHistory] = useState<FocusHistoryEntry[]>([]);
   const [bootReady, setBootReady] = useState(false);
 
   // ── Challenges state (progress + claimed rewards) ──────────────────────
@@ -582,9 +585,10 @@ function AppContent() {
     breakSession: BreakSession | null;
     sfxEnabled: boolean;
     challengeState: ChallengeState;
+    focusHistory?: FocusHistoryEntry[];
   };
 
-  const persistVersion = '1.3.0';
+  const persistVersion = '1.4.0';
   const persistKey = userId ? `karmquest_state:${userId}` : guestMode ? 'karmquest_state:guest' : 'karmquest_state:anon';
 
   // Completion history (additive): used by the Habit Heatmap to show true daily density,
@@ -925,6 +929,7 @@ function AppContent() {
     breakSession,
     sfxEnabled,
     challengeState,
+    focusHistory,
   };
 
   const restoreSnapshot = useCallback((s: PersistedSnapshot) => {
@@ -1094,6 +1099,24 @@ function AppContent() {
     } else {
       setBreakSession(null);
     }
+
+    // Focus history migration
+    const fhAny = (s as any).focusHistory;
+    if (Array.isArray(fhAny)) {
+      setFocusHistory(
+        (fhAny as any[]).filter(Boolean).map((e: any) => ({
+          id: typeof e.id === 'string' ? e.id : `fh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          questId: typeof e.questId === 'string' ? e.questId : '',
+          questTitle: typeof e.questTitle === 'string' ? e.questTitle : '',
+          startedAt: typeof e.startedAt === 'number' ? e.startedAt : 0,
+          endedAt: typeof e.endedAt === 'number' ? e.endedAt : 0,
+          durationMs: typeof e.durationMs === 'number' ? e.durationMs : 0,
+          label: typeof e.label === 'string' ? e.label : 'Focus',
+          xpAwarded: typeof e.xpAwarded === 'number' ? e.xpAwarded : 0,
+          day: typeof e.day === 'string' ? e.day : '',
+        })).filter((e) => e.questId && e.durationMs > 0).slice(-500)
+      );
+    }
   }, [defaultChallengeState, stripClaimed, DAILY_CHALLENGE_IDS, WEEKLY_CHALLENGE_IDS, normalizeNoteCreatedAt, statsDefaults]);
 
   const { hydrated } = useAppPersistence<PersistedSnapshot>({
@@ -1168,6 +1191,12 @@ function AppContent() {
     userId,
     quests,
     debounceMs: 800,
+  });
+
+  // Phase 10: Focus session sync
+  useSupabaseFocusSync({
+    userId,
+    focusHistory,
   });
 
   // Phase 7: In-app notifications (Reminders)
@@ -2226,6 +2255,22 @@ function AppContent() {
 
       setXpPopup({ xp: bonusXp, kind: 'focus' });
 
+      // Log to focus history
+      setFocusHistory((prev) => {
+        const entry: FocusHistoryEntry = {
+          id: `fh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          questId,
+          questTitle: title,
+          startedAt: focusSession?.startedAt || Date.now() - (focusSession?.durationMs || 0),
+          endedAt: Date.now(),
+          durationMs: focusSession?.durationMs || FOCUS_DEFAULT_MS,
+          label: focusSession?.label || 'Focus',
+          xpAwarded: bonusXp,
+          day: todayISO(),
+        };
+        return [...prev, entry].slice(-500);
+      });
+
       // Auto-start a Pomodoro break between sessions (short every session, long every 4th)
       const nextFocusCount = (challengeState.dailyFocus || 0) + 1;
       const kind: 'short' | 'long' = nextFocusCount % 4 === 0 ? 'long' : 'short';
@@ -2233,7 +2278,7 @@ function AppContent() {
 
       setFocusSession(null);
     },
-    [quests, notes, stats, achievements, challengeState, startBreak, addNotification, lang, sfxEnabled, logXpEventWithQueue, userId]
+    [quests, notes, stats, achievements, challengeState, startBreak, addNotification, lang, sfxEnabled, logXpEventWithQueue, userId, focusSession]
   );
 
   // Auto-award focus bonus when timer completes (idempotent)
@@ -2356,6 +2401,8 @@ function AppContent() {
         );
       case 'leaderboard':
         return <LeaderboardPage enabled={!!userId} />;
+      case 'focus':
+        return <FocusSessionHistory history={focusHistory} onNavigateToQuests={() => handleNavigate('quests')} />;
       case 'profile':
         return (
           <ProfilePage

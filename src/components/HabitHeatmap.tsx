@@ -715,7 +715,7 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
     return map;
   }, [quests, completionEvents]);
 
-  const { startISO, endISO, weeks, cells, monthLabels } = useMemo(() => {
+  const { startISO, endISO, weeks, cells } = useMemo(() => {
     const today = localMidnight(new Date());
     const endISO = isoFromDate(today);
     const effectiveDays = Math.min(30, Math.max(1, days));

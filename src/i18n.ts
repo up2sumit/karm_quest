@@ -13,6 +13,7 @@ const translations = {
   navChallenges: { en: 'Tapasya', hi: 'Daily Hustle 🔥', pro: 'Challenges' },
   navShop: { en: 'Mudra Shop', hi: 'Dukaan 🛍️', pro: 'Store' },
   navLeaderboard: { en: 'Leaderboard', hi: 'Leaderboard 🏅', pro: 'Leaderboard' },
+  navFocus: { en: 'Focus Log', hi: 'Focus History ⏱️', pro: 'Focus Log' },
   navSettings: { en: 'Settings', hi: 'Setting-Wetting ⚙️', pro: 'Settings' },
 
   // TopNav
@@ -65,18 +66,18 @@ const translations = {
   active: { en: 'Active', hi: 'Pending' },
 
   // ── NEW: Due date labels ───────────────────────────────────────────────────
-  dueDateLabel:   { en: 'Due Date',         hi: 'Kab Tak Karna Hai?' },
-  noDueDate:      { en: 'No due date',       hi: 'Koi deadline nahi' },
-  overdueLabel:   { en: 'Overdue!',          hi: 'Bhai Late Ho Gaye! 😬' },
-  dueTodayLabel:  { en: 'Due Today',         hi: 'Aaj Karna Hai!' },
-  dueSoonLabel:   { en: 'Due Soon',          hi: 'Jaldi Karo!' },
-  overdueCount:   { en: 'overdue',           hi: 'late' },
-  recurringLabel: { en: 'Recurring',         hi: 'Roz/Wkly?' },
-  recurrenceNone: { en: 'Not recurring',     hi: 'Normal' },
-  recurrenceDaily:{ en: 'Daily',             hi: 'Roz' },
-  recurrenceWeekly:{ en: 'Weekly',           hi: 'Hafte ka' },
-  badgeLabel:     { en: 'Title Badge',       hi: 'Badge' },
-  checklistLabel: { en: 'Checklist',         hi: 'Checklist' },
+  dueDateLabel: { en: 'Due Date', hi: 'Kab Tak Karna Hai?' },
+  noDueDate: { en: 'No due date', hi: 'Koi deadline nahi' },
+  overdueLabel: { en: 'Overdue!', hi: 'Bhai Late Ho Gaye! 😬' },
+  dueTodayLabel: { en: 'Due Today', hi: 'Aaj Karna Hai!' },
+  dueSoonLabel: { en: 'Due Soon', hi: 'Jaldi Karo!' },
+  overdueCount: { en: 'overdue', hi: 'late' },
+  recurringLabel: { en: 'Recurring', hi: 'Roz/Wkly?' },
+  recurrenceNone: { en: 'Not recurring', hi: 'Normal' },
+  recurrenceDaily: { en: 'Daily', hi: 'Roz' },
+  recurrenceWeekly: { en: 'Weekly', hi: 'Hafte ka' },
+  badgeLabel: { en: 'Title Badge', hi: 'Badge' },
+  checklistLabel: { en: 'Checklist', hi: 'Checklist' },
   addSubtaskPlaceholder: { en: 'Add a sub-task...', hi: 'Sub-task daalo...' },
   completeSubtasksFirst: { en: 'Complete all sub-tasks first', hi: 'Pehle saare sub-tasks complete karo' },
   // ──────────────────────────────────────────────────────────────────────────
