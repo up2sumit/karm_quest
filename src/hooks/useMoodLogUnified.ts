@@ -10,6 +10,8 @@ export type MoodEntry = {
   mood: MoodValue;
   /** A lightweight "productivity" signal captured at check-in time (e.g., quests completed today). */
   productivity: number;
+  /** Optional daily journal note. */
+  note?: string;
   updatedAt: number; // epoch ms
 };
 
@@ -40,6 +42,7 @@ function safeParse(raw: string | null): MoodEntry[] {
         date: typeof x.date === 'string' ? x.date : '',
         mood: (typeof x.mood === 'number' ? x.mood : 3) as MoodValue,
         productivity: typeof x.productivity === 'number' ? x.productivity : 0,
+        note: typeof x.note === 'string' ? x.note : undefined,
         updatedAt: typeof x.updatedAt === 'number' ? x.updatedAt : Date.now(),
       }))
       .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.date) && [1, 2, 3, 4, 5].includes(x.mood));
@@ -125,7 +128,7 @@ export function useMoodLogUnified() {
 
       const res = await supabase
         .from('mood_log')
-        .select('day,mood,productivity,updated_at')
+        .select('day,mood,productivity,note,updated_at')
         .eq('user_id', userId)
         .gte('day', cutoffISO)
         .order('day', { ascending: true });
@@ -141,6 +144,7 @@ export function useMoodLogUnified() {
         date: String(r.day),
         mood: Number(r.mood) as MoodValue,
         productivity: Number(r.productivity ?? 0),
+        note: r.note ? String(r.note) : undefined,
         updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
       })) as MoodEntry[];
 
@@ -158,8 +162,8 @@ export function useMoodLogUnified() {
   const todayEntry = useMemo(() => entries.find((e) => e.date === today) || null, [entries, today]);
 
   const setTodayMood = useCallback(
-    async (mood: MoodValue, productivity: number) => {
-      const item: MoodEntry = { date: today, mood, productivity, updatedAt: Date.now() };
+    async (mood: MoodValue, productivity: number, note?: string) => {
+      const item: MoodEntry = { date: today, mood, productivity, note, updatedAt: Date.now() };
 
       // optimistic local update
       setEntries((prev) => {
@@ -182,6 +186,7 @@ export function useMoodLogUnified() {
           day: today,
           mood,
           productivity,
+          note: note || null,
         },
         { onConflict: 'user_id,day' }
       );

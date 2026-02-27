@@ -24,8 +24,8 @@ import { FocusSessionHistory } from './components/FocusSessionHistory';
 import { PublicProfilePage } from './components/PublicProfilePage';
 import { LevelUpOverlay, type LevelUpData } from './components/LevelUpOverlay';
 import { t } from './i18n';
-import type { Page, Quest, Note, NoteRevision, UserStats, Achievement, AchievementCriteria, Difficulty, Recurrence, SubTask, FocusSession, BreakSession, FocusHistoryEntry, WeeklyReport } from './store';
-import { defaultQuests, defaultNotes, defaultAchievements, todayISO, yesterdayISO, noteColors, addDaysISO } from './store';
+import type { Page, Quest, Note, NoteRevision, UserStats, Achievement, AchievementCriteria, Difficulty, Recurrence, SubTask, FocusSession, BreakSession, FocusHistoryEntry, WeeklyReport, CustomChallenge } from './store';
+import { defaultQuests, defaultNotes, defaultAchievements, todayISO, yesterdayISO, noteColors, addDaysISO, defaultCommunityChallenges } from './store';
 import type { AppNotification } from './notifications';
 import { defaultNotifications, makeNotification } from './notifications';
 import { useMinWidth } from './hooks/useMinWidth';
@@ -41,7 +41,7 @@ import {
 } from './shop';
 import { weekEndFromWeekStart, weekStartFromISO, weekStartISO } from './utils/recurrence';
 import { sfx } from './sfx/sfx';
-import { questTemplates, type QuestTemplateId } from './templates/questTemplates';
+import { questTemplates, type QuestTemplateId, type QuestTemplate } from './templates/questTemplates';
 import { SupabaseTest } from "./components/SupabaseTest";
 import { logActivity } from './lib/activity';
 import { supabase } from './lib/supabase';
@@ -504,6 +504,7 @@ function AppContent() {
   const [shop, setShop] = useState<ShopState>(defaultShopState);
   const [sfxEnabled, setSfxEnabled] = useState<boolean>(true);
   const [focusHistory, setFocusHistory] = useState<FocusHistoryEntry[]>([]);
+  const [customTemplates, setCustomTemplates] = useState<QuestTemplate[]>([]);
   const [bootReady, setBootReady] = useState(false);
 
   // ── Challenges state (progress + claimed rewards) ──────────────────────
@@ -531,6 +532,8 @@ function AppContent() {
   }), []);
 
   const [challengeState, setChallengeState] = useState<ChallengeState>(defaultChallengeState);
+
+  const [customChallenges, setCustomChallenges] = useState<CustomChallenge[]>(defaultCommunityChallenges);
 
   // Notes: normalize createdAt to ISO so Supabase (timestamptz) can store it reliably.
   const normalizeNoteCreatedAt = useCallback((v: unknown): string => {
@@ -585,7 +588,9 @@ function AppContent() {
     breakSession: BreakSession | null;
     sfxEnabled: boolean;
     challengeState: ChallengeState;
+    customChallenges?: CustomChallenge[];
     focusHistory?: FocusHistoryEntry[];
+    customTemplates?: QuestTemplate[];
   };
 
   const persistVersion = '1.4.0';
@@ -816,6 +821,108 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weeklyReportsKey, stats.username, stats.avatarEmoji]);
 
+  const handleImportTodoist = useCallback(async (file: File) => {
+    const text = await file.text();
+    const rows = text.split('\n');
+    if (rows.length < 2) throw new Error('Invalid or empty CSV');
+
+    const headers = rows[0].split(',').map(h => h.trim().toUpperCase());
+    const contentIdx = headers.indexOf('CONTENT');
+    const compIdx = headers.indexOf('COMPLETED');
+
+    if (contentIdx === -1) throw new Error('Could not find CONTENT column in Todoist CSV');
+
+    const importedQuests: Quest[] = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      // Simple regex parser for basic CSV handling (won't handle all nested quotes perfectly but good enough for generic exports)
+      const row = rows[i];
+      if (!row.trim()) continue;
+
+      // Note: A robust CSV parser is better, but this regex handles commas inside quotes.
+      const matches = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+      if (!matches) continue;
+      const cols = matches.map(s => s.replace(/^"|"$/g, '').trim());
+
+      const title = cols[contentIdx] || '';
+      const isCompleted = compIdx !== -1 ? cols[compIdx] === '1' || cols[compIdx].toLowerCase() === 'true' : false;
+
+      if (!title || isCompleted) continue;
+
+      importedQuests.push({
+        id: uniqueId(),
+        title: title,
+        difficulty: 'medium',
+        category: 'Karma', // Default to Karma for imported
+        status: 'active',
+        xpReward: 20,
+        dueDate: '',
+        recurring: 'none',
+        completedAt: '',
+        subtasks: [],
+        badge: 'none'
+      });
+    }
+
+    if (importedQuests.length === 0) throw new Error('No active tasks found to import.');
+
+    setQuests(prev => [...prev, ...importedQuests]);
+  }, []);
+
+  const handleImportHabitica = useCallback(async (file: File) => {
+    const text = await file.text();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error('Invalid JSON file');
+    }
+
+    const tasksData = parsed?.tasks || parsed?.data?.tasks;
+    if (!tasksData) throw new Error('No tasks found in Habitica export');
+
+    const importedQuests: Quest[] = [];
+
+    const processTask = (t: any) => {
+      if (!t.text || t.completed) return;
+
+      let category = 'Karma';
+      if (t.type === 'habit') category = 'Mindfulness';
+      if (t.type === 'daily') category = 'Learning';
+
+      let diff: 'easy' | 'medium' | 'hard' = 'medium';
+      if (t.priority === 0.1) diff = 'easy';
+      else if (t.priority === 1) diff = 'medium';
+      else if (t.priority === 1.5) diff = 'hard';
+
+      importedQuests.push({
+        id: uniqueId(),
+        title: t.text,
+        difficulty: diff,
+        category,
+        status: 'active',
+        xpReward: diff === 'easy' ? 10 : diff === 'medium' ? 20 : 40,
+        dueDate: '',
+        recurring: 'none',
+        completedAt: '',
+        subtasks: [],
+        badge: 'none'
+      });
+    };
+
+    if (Array.isArray(tasksData)) {
+      tasksData.forEach(processTask);
+    } else {
+      if (Array.isArray(tasksData.habits)) tasksData.habits.forEach(processTask);
+      if (Array.isArray(tasksData.dailys)) tasksData.dailys.forEach(processTask);
+      if (Array.isArray(tasksData.todos)) tasksData.todos.forEach(processTask);
+    }
+
+    if (importedQuests.length === 0) throw new Error('No active tasks found to import.');
+
+    setQuests(prev => [...prev, ...importedQuests]);
+  }, []);
+
   useEffect(() => {
     setWeeklyReports(readWeeklyReports());
   }, [readWeeklyReports]);
@@ -929,7 +1036,9 @@ function AppContent() {
     breakSession,
     sfxEnabled,
     challengeState,
+    customChallenges,
     focusHistory,
+    customTemplates,
   };
 
   const restoreSnapshot = useCallback((s: PersistedSnapshot) => {
@@ -1116,6 +1225,19 @@ function AppContent() {
           day: typeof e.day === 'string' ? e.day : '',
         })).filter((e) => e.questId && e.durationMs > 0).slice(-500)
       );
+    }
+
+    if (Array.isArray(s.customChallenges)) {
+      setCustomChallenges(s.customChallenges);
+    } else {
+      setCustomChallenges(defaultCommunityChallenges);
+    }
+
+    const ctAny = (s as any).customTemplates;
+    if (Array.isArray(ctAny)) {
+      setCustomTemplates(ctAny);
+    } else {
+      setCustomTemplates([]);
     }
   }, [defaultChallengeState, stripClaimed, DAILY_CHALLENGE_IDS, WEEKLY_CHALLENGE_IDS, normalizeNoteCreatedAt, statsDefaults]);
 
@@ -1492,6 +1614,70 @@ function AppContent() {
     void inbox.clearAll();
   }, [inbox]);
 
+  const handleAcceptCustomChallenge = useCallback((id: string) => {
+    setCustomChallenges((prev) =>
+      prev.map((cc) => (cc.id === id ? { ...cc, status: 'active', progress: 0 } : cc))
+    );
+    addNotification(makeNotification('achievement', 'Challenge Accepted! 🔥', 'Your path is set. Progress starts now.'));
+  }, [addNotification]);
+
+  const handleClaimCustomChallenge = useCallback((id: string) => {
+    setCustomChallenges((prev) =>
+      prev.map((cc) => {
+        if (cc.id !== id) return cc;
+        setStats((s) => ({ ...s, coins: s.coins + cc.rewardCoins }));
+        addNotification(
+          makeNotification(
+            'achievement',
+            'Sankalp Fulfilled! 🏆',
+            `+${cc.rewardCoins} Mudras earned for "${cc.title}". Jai Ho!`
+          )
+        );
+        sfx.play('coin', sfxEnabled);
+        return { ...cc, status: 'completed' as const };
+      })
+    );
+  }, [addNotification, sfxEnabled]);
+
+  const handleAddCustomChallenge = useCallback((cc: Omit<CustomChallenge, 'id' | 'status' | 'progress' | 'isCommunity'>) => {
+    const newCC: CustomChallenge = {
+      ...cc,
+      id: uniqueId(),
+      status: 'available',
+      progress: 0,
+      isCommunity: true,
+    };
+    setCustomChallenges((prev) => [newCC, ...prev]);
+    addNotification(makeNotification('daily_challenge', 'Sankalp Deployed! 📜', `Your challenge "${cc.title}" is now in the Discovery Arena.`));
+  }, [addNotification]);
+
+  // Challenge Chains: Auto-unlock available challenges if their requirement is met
+  useEffect(() => {
+    if (!hydrated || !bootReady) return;
+    const completedIds = new Set(customChallenges.filter(cc => cc.status === 'completed').map(cc => cc.id));
+
+    setCustomChallenges(prev => {
+      let changed = false;
+      const next = prev.map(cc => {
+        if (cc.status === 'available' && cc.requiresChallengeId) {
+          if (completedIds.has(cc.requiresChallengeId)) {
+            // Prerequisite met! (No status change here, just noting it's ready for acceptance)
+            // But usually chains mean the UI should show it as "Available" only then.
+            // Our logic already handles "isLocked" in the component.
+          }
+        }
+        return cc;
+      });
+      return changed ? next : prev;
+    });
+  }, [customChallenges, hydrated, bootReady]);
+
+  const handleCreateNoteForQuest = useCallback((questId: string) => {
+    // We can use a special ID format to signal new linked note to NotesVault
+    setFocusNoteId(`new-link-${questId}`);
+    setCurrentPage('notes');
+  }, []);
+
   const handleNavigate = useCallback((page: Page) => {
     setCurrentPage(page);
     setMobileOpen(false);
@@ -1538,6 +1724,12 @@ function AppContent() {
 
   const handleUpdateQuest = useCallback((id: string, patch: Partial<Omit<Quest, 'id'>>) => {
     setQuests((prev) => prev.map((q) => (q.id === id ? ({ ...q, ...patch } as Quest) : q)));
+  }, []);
+
+  const handleReorderQuests = useCallback((newQuests: Quest[]) => {
+    // We update the entire list and assign 'order' based on the new array position
+    const ordered = newQuests.map((q, i) => ({ ...q, order: i }));
+    setQuests(ordered);
   }, []);
 
   const handleCompleteQuest = useCallback(
@@ -1618,6 +1810,18 @@ function AppContent() {
         )
       );
 
+      // Update Custom Challenges Progress (Type: Quests)
+      setCustomChallenges((prev) =>
+        prev.map((cc) => {
+          if (cc.status !== 'active' || cc.type !== 'quests') return cc;
+          const nextProgress = cc.progress + 1;
+          return {
+            ...cc,
+            progress: Math.min(nextProgress, cc.targetCount),
+          };
+        })
+      );
+
       // Streak calc
       const today = doneDate;
       const yesterday = yesterdayISO();
@@ -1652,6 +1856,18 @@ function AppContent() {
 
       // Challenges: track weekly XP earned (used for Divya Grind)
       setChallengeState((prev) => ({ ...prev, weeklyXp: (prev.weeklyXp || 0) + xpEarned }));
+
+      // Custom Challenges: track 'quests' and 'xp'
+      setCustomChallenges((prev) => prev.map(cc => {
+        if (cc.status !== 'active') return cc;
+        let nextCc = { ...cc };
+        if (cc.type === 'quests') {
+          nextCc.progress = Math.min(cc.targetCount, cc.progress + 1);
+        } else if (cc.type === 'xp') {
+          nextCc.progress = Math.min(cc.targetCount, cc.progress + xpEarned);
+        }
+        return nextCc;
+      }));
 
       // SFX: coin on XP gain
       sfx.play('coin', sfxEnabled);
@@ -1927,10 +2143,16 @@ function AppContent() {
     }
     window.location.reload();
   }, []);
-  // ── Quest templates ───────────────────────────────────────────────────
   const applyQuestTemplate = useCallback(
-    (templateId: QuestTemplateId) => {
-      const tpl = questTemplates[templateId];
+    (templateId: QuestTemplateId | string, isCustom?: boolean) => {
+      let tpl;
+      if (isCustom) {
+        tpl = customTemplates.find((ct: any) => ct.id === templateId);
+        console.log('App.tsx applyQuestTemplate (custom) ID:', templateId, 'FOUND:', tpl);
+      } else {
+        tpl = questTemplates[templateId as QuestTemplateId];
+        console.log('App.tsx applyQuestTemplate (default) ID:', templateId, 'FOUND:', tpl);
+      }
       if (!tpl) return;
 
       const today = todayISO();
@@ -1974,7 +2196,7 @@ function AppContent() {
         )
       );
     },
-    [addNotification, tasksWord]
+    [addNotification, tasksWord, customTemplates]
   );
 
   // ── Shop handlers ───────────────────────────────────────────────────────
@@ -2206,6 +2428,16 @@ function AppContent() {
         weeklyXp: (prev.weeklyXp || 0) + bonusXp,
       }));
 
+      // Custom Challenges: track 'xp'
+      setCustomChallenges((prev) => prev.map(cc => {
+        if (cc.status !== 'active' || cc.type !== 'xp') return cc;
+        const nextProgress = Math.min(cc.targetCount, cc.progress + bonusXp);
+        return {
+          ...cc,
+          progress: nextProgress,
+        };
+      }));
+
       // SFX: coin on XP gain
       sfx.play('coin', sfxEnabled);
       // Achievements unlocked on this action (XP + semantic criteria)
@@ -2355,6 +2587,7 @@ function AppContent() {
             onAdd={handleAddQuest}
             onUpdate={handleUpdateQuest}
             onDelete={handleDeleteQuest}
+            onReorder={handleReorderQuests}
             ownedBadges={shop.ownedBadges}
             searchQuery={globalSearch}
             focusQuestId={focusQuestId}
@@ -2363,12 +2596,15 @@ function AppContent() {
             focusNowMs={focusNow}
             onStartFocus={startFocus}
             onStopFocus={stopFocus}
+            notes={notes}
+            onCreateNote={handleCreateNoteForQuest}
           />
         );
       case 'notes':
         return (
           <NotesVault
             notes={notes}
+            quests={quests}
             onAdd={handleAddNote}
             onDelete={handleDeleteNote}
             onUpdate={handleUpdateNote}
@@ -2400,7 +2636,15 @@ function AppContent() {
           />
         );
       case 'leaderboard':
-        return <LeaderboardPage enabled={!!userId} />;
+        return (
+          <LeaderboardPage
+            enabled={!!userId}
+            customChallenges={customChallenges}
+            onAcceptChallenge={handleAcceptCustomChallenge}
+            onClaimChallenge={handleClaimCustomChallenge}
+            onAddChallenge={handleAddCustomChallenge}
+          />
+        );
       case 'focus':
         return <FocusSessionHistory history={focusHistory} onNavigateToQuests={() => handleNavigate('quests')} />;
       case 'profile':
@@ -2416,6 +2660,17 @@ function AppContent() {
             sfxEnabled={sfxEnabled}
             onToggleSfx={setSfxEnabled}
             onApplyTemplate={applyQuestTemplate}
+            customTemplates={customTemplates}
+            onSaveCustomTemplate={(tpl) => setCustomTemplates(prev => {
+              const idx = prev.findIndex(p => p.id === tpl.id);
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = tpl;
+                return copy;
+              }
+              return [...prev, tpl];
+            })}
+            onDeleteCustomTemplate={(id) => setCustomTemplates(prev => prev.filter(p => p.id !== id))}
             authEmail={userEmail}
             authUserId={userId}
             onSignOut={userId ? () => void signOut() : undefined}
@@ -2426,6 +2681,8 @@ function AppContent() {
                 : { connected: false, saving: false, queued: false, error: null, lastSyncedAt: null }
             }
             onImport={handleImportData}
+            onImportTodoist={handleImportTodoist}
+            onImportHabitica={handleImportHabitica}
           />
         );
       default:

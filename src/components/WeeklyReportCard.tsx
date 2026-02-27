@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Copy, Share2, X, Calendar, Sparkles } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import type { WeeklyReport } from '../store';
@@ -262,7 +263,7 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
       </div>
 
       {/* Modal */}
-      {open ? (
+      {open ? createPortal(
         <div className="fixed inset-0 z-[100]">
           {/* Overlay */}
           <div className="fixed inset-0 bg-black/60" onClick={() => setOpen(false)} />
@@ -356,7 +357,8 @@ export function WeeklyReportCard({ report, autoOpen, onAutoOpenConsumed, onDismi
               ) : null}
             </div>
           </div>
-        </div >
+        </div >,
+        document.body
       ) : null
       }
     </>

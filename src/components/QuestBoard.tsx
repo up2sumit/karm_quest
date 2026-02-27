@@ -1,9 +1,10 @@
-import { Plus, Check, Clock, Star, Filter, Sparkles, AlertCircle, CalendarDays, List, Pencil, X, Trash2 } from 'lucide-react';
+import { Plus, Check, Clock, Star, Filter, Sparkles, AlertCircle, CalendarDays, List, Pencil, X, Trash2, GripVertical, FileText } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
-import type { Quest, Difficulty, Recurrence, SubTask, FocusSession } from '../store';
+import type { Quest, Difficulty, Recurrence, SubTask, FocusSession, Note } from '../store';
 import { difficultyConfig as defaultDiffConfig, parseDueDate, dueDateSortKey, todayISO, addDaysISO } from '../store';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
 import { formatMs, titleBadgeMetaForTheme, titleBadgePillClass } from '../shop';
 
@@ -17,6 +18,7 @@ interface QuestBoardProps {
   // Keep existing advanced functionality (no removals)
   onUpdate: (id: string, patch: Partial<Omit<Quest, 'id'>>) => void;
   onDelete: (id: string) => void;
+  onReorder: (quests: Quest[]) => void;
 
   ownedBadges: string[];
   searchQuery?: string;
@@ -28,6 +30,9 @@ interface QuestBoardProps {
   focusNowMs: number;
   onStartFocus: (questId: string, opts?: { durationMs?: number; label?: string }) => void;
   onStopFocus: (reason?: string) => void;
+  // Notes integration
+  notes?: Note[];
+  onCreateNote?: (questId: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,7 +258,7 @@ function SwipeReveal({
 // ─────────────────────────────────────────────────────────────────────────────
 // QuestBoard
 // ─────────────────────────────────────────────────────────────────────────────
-export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, ownedBadges, searchQuery = '', focusQuestId, onFocusHandled, focusSession, focusNowMs, onStartFocus, onStopFocus }: QuestBoardProps) {
+export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, onReorder, ownedBadges, searchQuery = '', focusQuestId, onFocusHandled, focusSession, focusNowMs, onStartFocus, onStopFocus, notes = [], onCreateNote }: QuestBoardProps) {
   const { isDark, isHinglish, isModern, lang, theme } = useTheme();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -495,17 +500,21 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
 
   const overdueCount = activeQuests.filter(q => parseDueDate(q.dueDate).isOverdue).length;
 
-  // Active quests: sorted by due date ascending (overdue first → today → tomorrow → future → no date)
+  // Active quests: sorted by 'order' if available, otherwise by due date
   const sortedActiveQuests = [...activeQuests].sort(
-    (a, b) => dueDateSortKey(a.dueDate) - dueDateSortKey(b.dueDate)
+    (a, b) => {
+      if (typeof a.order === 'number' && typeof b.order === 'number') {
+        return a.order - b.order;
+      }
+      return dueDateSortKey(a.dueDate) - dueDateSortKey(b.dueDate);
+    }
   );
 
   // Build the list shown to the user based on the active filter
-  // For 'all': show sorted active quests first, then completed quests (preserving original order)
   const filteredQuests =
     filter === 'active' ? sortedActiveQuests :
       filter === 'completed' ? completedQuestsUI :
-    /* all */[...sortedActiveQuests, ...completedQuestsUI];
+        /* all */[...sortedActiveQuests, ...completedQuestsUI];
 
   // ── Calendar buckets (by ISO date) ───────────────────────────────────────
   const questsByISO = useMemo(() => {
@@ -624,6 +633,26 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
 
   const updateBadge = (quest: Quest, badge: string) => {
     onUpdate(quest.id, { badge });
+  };
+
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    if (result.destination.index === result.source.index) return;
+
+    const sourceIdx = result.source.index;
+    const destIdx = result.destination.index;
+
+    // Only allow reordering within active quests for now to keep logic simple
+    if (filter !== 'active' && filter !== 'all') return;
+
+    const items = [...sortedActiveQuests];
+    const [reorderedItem] = items.splice(sourceIdx, 1);
+    items.splice(destIdx, 0, reorderedItem);
+
+    // Call onReorder with NEW list of all quests
+    // We want to preserve completed quests at the end or wherever they are in the full list
+    const otherQuests = quests.filter(q => q.status !== 'active');
+    onReorder([...items, ...otherQuests]);
   };
 
   return (
@@ -1339,320 +1368,375 @@ export function QuestBoard({ quests, onComplete, onAdd, onUpdate, onDelete, owne
         </div>
       ) : (
         /* ── Quest Cards (List View) ────────────────────────────────────── */
-        <div className="space-y-2.5">
-          {filteredQuests.map((quest, index) => {
-            const config = defaultDiffConfig[quest.difficulty];
-            const isCompleting = completedAnimation === quest.id;
-            const { isOverdue, isDueToday } = parseDueDate(quest.dueDate);
-            const showOverdue = isOverdue && quest.status === 'active';
-            const showDueToday = isDueToday && quest.status === 'active';
-            const isExpanded = expandedId === quest.id;
-            const focusOnThis = !!focusSession && focusSession.questId === quest.id;
-            const focusOther = !!focusSession && focusSession.questId !== quest.id;
-            const focusRemaining = focusOnThis ? Math.max(0, focusSession!.endsAt - focusNowMs) : 0;
-            const badgeId = (quest.badge || 'none') as string;
-            const badge = titleBadgeMetaForTheme(badgeId, theme);
-
-            return (
-              <SwipeReveal
-                key={quest.id}
-                enabled={quest.status === 'active'}
-                onDelete={() => onDelete(quest.id)}
-                deleteText="Delete"
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="quests-list">
+            {(provided) => (
+              <div
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+                className="space-y-2.5"
               >
-                <div
-                  id={`quest-${quest.id}`}
-                  className={[
-                    card,
-                    'rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md',
-                    // Difficulty left-border (from index.css) — overdue gets a subtle accent, not aggressive red
-                    showOverdue
-                      ? 'quest-card-overdue'
-                      : `quest-card-${quest.difficulty}`,
-                    quest.status === 'completed' ? 'opacity-50' : '',
-                    isCompleting ? 'animate-shake scale-[0.98]' : '',
-                  ].filter(Boolean).join(' ')}
-                  style={{ animationDelay: `${index * 40}ms` }}
-                >
-                  <div className="flex flex-wrap items-center gap-3.5">
-                    {/* Completion button */}
-                    <button
-                      onClick={() => quest.status === 'active' && handleComplete(quest.id)}
-                      disabled={quest.status === 'completed'}
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all ${quest.status === 'completed'
-                        ? 'bg-emerald-500/20 text-emerald-500'
-                        : isDark
-                          ? 'bg-white/[0.04] border border-white/[0.08] hover:border-indigo-400/40 hover:bg-indigo-500/10 hover:scale-105'
-                          : 'bg-slate-50 border border-slate-200/60 hover:border-indigo-300 hover:bg-indigo-50 hover:scale-105'
-                        }`}
+                {filteredQuests.map((quest, index) => {
+                  const config = defaultDiffConfig[quest.difficulty];
+                  const isCompleting = completedAnimation === quest.id;
+                  const { isOverdue, isDueToday } = parseDueDate(quest.dueDate);
+                  const showOverdue = isOverdue && quest.status === 'active';
+                  const showDueToday = isDueToday && quest.status === 'active';
+                  const isExpanded = expandedId === quest.id;
+                  const focusOnThis = !!focusSession && focusSession.questId === quest.id;
+                  const focusOther = !!focusSession && focusSession.questId !== quest.id;
+                  const focusRemaining = focusOnThis ? Math.max(0, focusSession!.endsAt - focusNowMs) : 0;
+                  const badgeId = (quest.badge || 'none') as string;
+                  const badge = titleBadgeMetaForTheme(badgeId, theme);
+
+                  return (
+                    <Draggable
+                      key={quest.id}
+                      draggableId={quest.id}
+                      index={index}
+                      isDragDisabled={quest.status === 'completed' || filter === 'completed'}
                     >
-                      {quest.status === 'completed'
-                        ? <Check size={16} />
-                        : <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>✓</span>
-                      }
-                    </button>
-
-                    {/* Quest info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className={`font-medium text-[13px] ${quest.status === 'completed'
-                          ? 'line-through text-slate-400'
-                          : tp
-                          }`}>
-                          {quest.title}
-                        </h4>
-                        {quest.difficulty === 'legendary' && <span className="text-xs">👑</span>}
-                        {/* Overdue badge */}
-                        {showOverdue && (
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${isDark
-                            ? 'bg-red-500/15 text-red-400'
-                            : 'bg-red-100 text-red-600'
-                            }`}>
-                            {t('overdueLabel', lang)}
-                          </span>
-                        )}
-                        {/* Due Today badge */}
-                        {showDueToday && !showOverdue && (
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${isHinglish
-                            ? 'bg-indigo-100 text-indigo-600'
-                            : isDark
-                              ? 'bg-amber-500/15 text-amber-400'
-                              : 'bg-amber-50 text-amber-600'
-                            }`}>
-                            {t('dueTodayLabel', lang)}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2.5 mt-1 flex-wrap">
-                        {/* Difficulty pill */}
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isDark ? config.darkBg : config.bg} ${config.color}`}>
-                          {diffLabels[quest.difficulty]}
-                        </span>
-
-                        {/* Recurring pill */}
-                        {quest.recurring && quest.recurring !== 'none' && (
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${darkLike ? 'bg-white/[0.04] text-slate-300' : 'bg-slate-50 text-slate-700'
-                            }`}>
-                            {quest.recurring === 'daily' ? t('recurrenceDaily', lang) : t('recurrenceWeekly', lang)}
-                          </span>
-                        )}
-
-                        {/* Badge pill */}
-                        {badgeId !== 'none' && (
-                          <span className={titleBadgePillClass(badgeId, theme)}>
-                            <span>{badge.emoji}</span>
-                            <span>{badge.label}</span>
-                          </span>
-                        )}
-
-                        {/* Due date — uses the DueDateBadge component */}
-                        <DueDateBadge
-                          dueDate={quest.dueDate}
-                          isDark={isDark}
-                          isHinglish={isHinglish}
-                          lang={lang}
-                          isCompleted={quest.status === 'completed'}
-                        />
-
-                        {/* Category */}
-                        {(() => {
-                          const cc = getCategoryConfig(quest.category); return cc ? (
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${darkLike ? cc.darkBg : cc.bg} ${cc.color}`}>
-                              <span>{cc.emoji}</span>{cc.label}
-                            </span>
-                          ) : (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-white/[0.03] text-slate-500' : 'bg-slate-50 text-slate-500'}`}>
-                              {quest.category}
-                            </span>
-                          );
-                        })()}
-
-                        {/* Focus status */}
-                        {focusOnThis && quest.status === 'active' && (
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${isHinglish ? 'bg-indigo-100 text-indigo-700' : isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'
-                            }`}>
-                            {t('focusInProgress', lang)} • {formatMs(focusRemaining)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* XP badge */}
-                    <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg shrink-0 ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'
-                      }`}>
-                      <Star size={13} className={
-                        isHinglish ? 'text-indigo-400 fill-indigo-300' :
-                          isDark ? 'text-indigo-400 fill-indigo-400' :
-                            'text-indigo-500 fill-indigo-400'
-                      } />
-                      <span className={`text-[13px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        +{quest.xpReward}
-                      </span>
-                    </div>
-
-                    {/* Actions: Focus + Details */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      {quest.status === 'active' && (
-                        focusOnThis ? (
-                          <button
-                            onClick={() => onStopFocus()}
-                            className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${isHinglish
-                              ? 'bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/15'
-                              : isDark
-                                ? 'bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/20'
-                                : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
-                              }`}
+                      {(dragProvided, snapshot) => (
+                        <div
+                          ref={dragProvided.innerRef}
+                          {...dragProvided.draggableProps}
+                        >
+                          <SwipeReveal
+                            enabled={quest.status === 'active'}
+                            onDelete={() => onDelete(quest.id)}
+                            deleteText="Delete"
                           >
-                            {t('focusStop', lang)}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => onStartFocus(quest.id, { durationMs: focusPreset.durationMs, label: focusPreset.label })}
-                            className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${focusOther
-                              ? (isDark ? 'bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]' : 'bg-slate-50 text-slate-700 hover:bg-slate-100')
-                              : (isHinglish ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white' : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white')
-                              }`}
-                          >
-                            {focusOther ? 'Switch Focus' : t('focusStart', lang)}
-                          </button>
-                        )
-                      )}
-                      <button
-                        onClick={() => openEdit(quest)}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${darkLike ? 'bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.06]'
-                          : 'bg-white hover:bg-slate-50 border border-slate-200/50'
-                          }`}
-                        aria-label="Edit quest"
-                        title="Edit"
-                      >
-                        <Pencil size={16} className={isDark ? 'text-slate-400' : 'text-slate-600'} />
-                      </button>
-                      <button
-                        onClick={() => toggleExpand(quest.id)}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${darkLike ? 'bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.06]'
-                          : 'bg-white hover:bg-slate-50 border border-slate-200/50'
-                          }`}
-                        aria-label="Quest details"
-                        title="Details"
-                      >
-                        <List size={16} className={isDark ? 'text-slate-400' : 'text-slate-600'} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expanded details */}
-                  {isExpanded && (
-                    <div className={`mt-3 pt-3 border-t ${isDark ? 'border-white/[0.06]' : 'border-slate-200/40'} space-y-3`}>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('recurringLabel', lang)}</label>
-                          <select
-                            value={(quest.recurring || 'none') as string}
-                            onChange={(e) => updateRecurrence(quest, e.target.value as Recurrence)}
-                            className={`mt-1 w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
-                          >
-                            <option value="none">{t('recurrenceNone', lang)}</option>
-                            <option value="daily">{t('recurrenceDaily', lang)}</option>
-                            <option value="weekly">{t('recurrenceWeekly', lang)}</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('badgeLabel', lang)}</label>
-                          <select
-                            value={(quest.badge || 'none') as string}
-                            onChange={(e) => updateBadge(quest, e.target.value)}
-                            className={`mt-1 w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
-                          >
-                            {badgeOptions.map((b) => {
-                              const meta = titleBadgeMetaForTheme(b, theme);
-                              const label = b === 'none' ? 'None' : `${meta.emoji} ${meta.label}`;
-                              return <option key={b} value={b}>{label}</option>;
-                            })}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('checklistLabel', lang)}</div>
-                        <div className="mt-2 space-y-2">
-                          {(Array.isArray(quest.subtasks) ? quest.subtasks : []).map((s) => (
-                            <div key={s.id} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
-                              <input
-                                type="checkbox"
-                                checked={!!s.done}
-                                disabled={quest.status === 'completed'}
-                                onChange={() => toggleSubtask(quest, s.id)}
-                                className="accent-indigo-500"
-                              />
-                              <div className={`flex-1 text-[12px] ${quest.status === 'completed' ? 'line-through opacity-70' : ''} ${tp}`}>{s.text}</div>
-                              {quest.status !== 'completed' && (
+                            <div
+                              id={`quest-${quest.id}`}
+                              className={[
+                                card,
+                                'rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md',
+                                snapshot.isDragging ? 'shadow-2xl ring-2 ring-indigo-500/50 scale-[1.02] z-50' : '',
+                                // Difficulty left-border (from index.css) — overdue gets a subtle accent, not aggressive red
+                                showOverdue
+                                  ? 'quest-card-overdue'
+                                  : `quest-card-${quest.difficulty}`,
+                                quest.status === 'completed' ? 'opacity-50' : '',
+                                isCompleting ? 'animate-shake scale-[0.98]' : '',
+                              ].filter(Boolean).join(' ')}
+                              style={{
+                                ...dragProvided.draggableProps.style,
+                                animationDelay: `${index * 40}ms`
+                              }}
+                            >
+                              <div className="flex flex-wrap items-center gap-3.5">
+                                {/* Drag Handle */}
+                                {quest.status === 'active' && filter !== 'completed' && (
+                                  <div
+                                    {...dragProvided.dragHandleProps}
+                                    className={`p-1 -ml-2 rounded-lg transition-opacity cursor-grab active:cursor-grabbing ${darkLike ? 'hover:bg-white/5 text-slate-600' : 'hover:bg-slate-100 text-slate-400'
+                                      }`}
+                                  >
+                                    <GripVertical size={16} />
+                                  </div>
+                                )}
+                                {/* Completion button */}
                                 <button
-                                  onClick={() => removeSubtask(quest, s.id)}
-                                  className={`text-[12px] px-2 py-1 rounded-lg ${isDark ? 'text-slate-400 hover:bg-white/[0.06]' : 'text-slate-500 hover:bg-slate-100'}`}
-                                  title="Remove"
+                                  onClick={() => quest.status === 'active' && handleComplete(quest.id)}
+                                  disabled={quest.status === 'completed'}
+                                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all ${quest.status === 'completed'
+                                    ? 'bg-emerald-500/20 text-emerald-500'
+                                    : isDark
+                                      ? 'bg-white/[0.04] border border-white/[0.08] hover:border-indigo-400/40 hover:bg-indigo-500/10 hover:scale-105'
+                                      : 'bg-slate-50 border border-slate-200/60 hover:border-indigo-300 hover:bg-indigo-50 hover:scale-105'
+                                    }`}
                                 >
-                                  ✕
+                                  {quest.status === 'completed'
+                                    ? <Check size={16} />
+                                    : <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>✓</span>
+                                  }
                                 </button>
+
+                                {/* Quest info */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className={`font-medium text-[13px] ${quest.status === 'completed'
+                                      ? 'line-through text-slate-400'
+                                      : tp
+                                      }`}>
+                                      {quest.title}
+                                    </h4>
+                                    {quest.difficulty === 'legendary' && <span className="text-xs">👑</span>}
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {notes && notes.some(n => n.linkedQuestId === quest.id) && (
+                                        <div className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                                          <FileText size={10} />
+                                          <span>Note</span>
+                                        </div>
+                                      )}
+                                      {/* Overdue badge */}
+                                      {showOverdue && (
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${isDark
+                                          ? 'bg-red-500/15 text-red-400'
+                                          : 'bg-red-100 text-red-600'
+                                          }`}>
+                                          {t('overdueLabel', lang)}
+                                        </span>
+                                      )}
+                                      {/* Due Today badge */}
+                                      {showDueToday && !showOverdue && (
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide ${isHinglish
+                                          ? 'bg-indigo-100 text-indigo-600'
+                                          : isDark
+                                            ? 'bg-amber-500/15 text-amber-400'
+                                            : 'bg-amber-50 text-amber-600'
+                                          }`}>
+                                          {t('dueTodayLabel', lang)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2.5 mt-1 flex-wrap">
+                                    {/* Difficulty pill */}
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isDark ? config.darkBg : config.bg} ${config.color}`}>
+                                      {diffLabels[quest.difficulty]}
+                                    </span>
+
+                                    {/* Recurring pill */}
+                                    {quest.recurring && quest.recurring !== 'none' && (
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${darkLike ? 'bg-white/[0.04] text-slate-300' : 'bg-slate-50 text-slate-700'
+                                        }`}>
+                                        {quest.recurring === 'daily' ? t('recurrenceDaily', lang) : t('recurrenceWeekly', lang)}
+                                      </span>
+                                    )}
+
+                                    {/* Badge pill */}
+                                    {badgeId !== 'none' && (
+                                      <span className={titleBadgePillClass(badgeId, theme)}>
+                                        <span>{badge.emoji}</span>
+                                        <span>{badge.label}</span>
+                                      </span>
+                                    )}
+
+                                    {/* Due date — uses the DueDateBadge component */}
+                                    <DueDateBadge
+                                      dueDate={quest.dueDate}
+                                      isDark={isDark}
+                                      isHinglish={isHinglish}
+                                      lang={lang}
+                                      isCompleted={quest.status === 'completed'}
+                                    />
+
+                                    {/* Category */}
+                                    {(() => {
+                                      const cc = getCategoryConfig(quest.category); return cc ? (
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${darkLike ? cc.darkBg : cc.bg} ${cc.color}`}>
+                                          <span>{cc.emoji}</span>{cc.label}
+                                        </span>
+                                      ) : (
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-white/[0.03] text-slate-500' : 'bg-slate-50 text-slate-500'}`}>
+                                          {quest.category}
+                                        </span>
+                                      );
+                                    })()}
+
+                                    {/* Focus status */}
+                                    {focusOnThis && quest.status === 'active' && (
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${isHinglish ? 'bg-indigo-100 text-indigo-700' : isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'
+                                        }`}>
+                                        {t('focusInProgress', lang)} • {formatMs(focusRemaining)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* XP badge */}
+                                <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg shrink-0 ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'
+                                  }`}>
+                                  <Star size={13} className={
+                                    isHinglish ? 'text-indigo-400 fill-indigo-300' :
+                                      isDark ? 'text-indigo-400 fill-indigo-400' :
+                                        'text-indigo-500 fill-indigo-400'
+                                  } />
+                                  <span className={`text-[13px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                    +{quest.xpReward}
+                                  </span>
+                                </div>
+
+                                {/* Actions: Focus + Details */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {quest.status === 'active' && (
+                                    focusOnThis ? (
+                                      <button
+                                        onClick={() => onStopFocus()}
+                                        className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${isHinglish
+                                          ? 'bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/15'
+                                          : isDark
+                                            ? 'bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/20'
+                                            : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
+                                          }`}
+                                      >
+                                        {t('focusStop', lang)}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => onStartFocus(quest.id, { durationMs: focusPreset.durationMs, label: focusPreset.label })}
+                                        className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${focusOther
+                                          ? (isDark ? 'bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]' : 'bg-slate-50 text-slate-700 hover:bg-slate-100')
+                                          : (isHinglish ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white' : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white')
+                                          }`}
+                                      >
+                                        {focusOther ? 'Switch Focus' : t('focusStart', lang)}
+                                      </button>
+                                    )
+                                  )}
+                                  <button
+                                    onClick={() => openEdit(quest)}
+                                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${darkLike ? 'bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.06]'
+                                      : 'bg-white hover:bg-slate-50 border border-slate-200/50'
+                                      }`}
+                                    aria-label="Edit quest"
+                                    title="Edit"
+                                  >
+                                    <Pencil size={16} className={isDark ? 'text-slate-400' : 'text-slate-600'} />
+                                  </button>
+                                  <button
+                                    onClick={() => toggleExpand(quest.id)}
+                                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${darkLike ? 'bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.06]'
+                                      : 'bg-white hover:bg-slate-50 border border-slate-200/50'
+                                      }`}
+                                    aria-label="Quest details"
+                                    title="Details"
+                                  >
+                                    <List size={16} className={isDark ? 'text-slate-400' : 'text-slate-600'} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Expanded details */}
+                              {isExpanded && (
+                                <div className={`mt-3 pt-3 border-t ${isDark ? 'border-white/[0.06]' : 'border-slate-200/40'} space-y-3`}>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                      <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('recurringLabel', lang)}</label>
+                                      <select
+                                        value={(quest.recurring || 'none') as string}
+                                        onChange={(e) => updateRecurrence(quest, e.target.value as Recurrence)}
+                                        className={`mt-1 w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                                      >
+                                        <option value="none">{t('recurrenceNone', lang)}</option>
+                                        <option value="daily">{t('recurrenceDaily', lang)}</option>
+                                        <option value="weekly">{t('recurrenceWeekly', lang)}</option>
+                                      </select>
+                                    </div>
+
+                                    <div>
+                                      <label className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('badgeLabel', lang)}</label>
+                                      <select
+                                        value={(quest.badge || 'none') as string}
+                                        onChange={(e) => updateBadge(quest, e.target.value)}
+                                        className={`mt-1 w-full px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                                      >
+                                        {badgeOptions.map((b) => {
+                                          const meta = titleBadgeMetaForTheme(b, theme);
+                                          const label = b === 'none' ? 'None' : `${meta.emoji} ${meta.label}`;
+                                          return <option key={b} value={b}>{label}</option>;
+                                        })}
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <div className={`text-[11px] font-semibold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('checklistLabel', lang)}</div>
+                                    <div className="mt-2 space-y-2">
+                                      {(Array.isArray(quest.subtasks) ? quest.subtasks : []).map((s) => (
+                                        <div key={s.id} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
+                                          <input
+                                            type="checkbox"
+                                            checked={!!s.done}
+                                            disabled={quest.status === 'completed'}
+                                            onChange={() => toggleSubtask(quest, s.id)}
+                                            className="accent-indigo-500"
+                                          />
+                                          <div className={`flex-1 text-[12px] ${quest.status === 'completed' ? 'line-through opacity-70' : ''} ${tp}`}>{s.text}</div>
+                                          {quest.status !== 'completed' && (
+                                            <button
+                                              onClick={() => removeSubtask(quest, s.id)}
+                                              className={`text-[12px] px-2 py-1 rounded-lg ${isDark ? 'text-slate-400 hover:bg-white/[0.06]' : 'text-slate-500 hover:bg-slate-100'}`}
+                                              title="Remove"
+                                            >
+                                              ✕
+                                            </button>
+                                          )}
+                                        </div>
+                                      ))}
+
+                                      {quest.status !== 'completed' && (
+                                        <div className="flex items-center gap-2">
+                                          <input
+                                            value={subtaskDraft}
+                                            onChange={(e) => setSubtaskDraft(e.target.value)}
+                                            placeholder={t('addSubtaskPlaceholder', lang)}
+                                            className={`flex-1 px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
+                                          />
+                                          <button
+                                            onClick={() => addSubtask(quest)}
+                                            className={`px-3 py-2 rounded-xl text-[12px] font-semibold text-white ${btnGradient}`}
+                                          >
+                                            <Plus size={14} className="inline -mt-[2px]" />
+                                          </button>
+                                        </div>
+                                      )}
+
+                                      {(Array.isArray(quest.subtasks) ? quest.subtasks : []).length === 0 && (
+                                        <div className={`text-[12px] ${ts}`}>—</div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {quest.status === 'active' && (
+                                    <div className="pt-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+                                      <button
+                                        type="button"
+                                        onClick={() => onCreateNote?.(quest.id)}
+                                        className={`px-4 py-2.5 rounded-xl text-[12px] font-semibold inline-flex items-center justify-center gap-2 transition-all whitespace-nowrap ${isDark ? 'bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/15' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/40'
+                                          }`}
+                                      >
+                                        <FileText size={14} />
+                                        Add Note
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const ok = window.confirm('Delete this task?');
+                                          if (ok) onDelete(quest.id);
+                                        }}
+                                        className={`px-4 py-2.5 rounded-xl text-[12px] font-semibold inline-flex items-center justify-center gap-2 transition-all whitespace-nowrap ${isDark ? 'bg-red-500/10 text-red-300 hover:bg-red-500/15' : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200/40'
+                                          }`}
+                                      >
+                                        <Trash2 size={14} />
+                                        Delete Quest
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
-                          ))}
-
-                          {quest.status !== 'completed' && (
-                            <div className="flex items-center gap-2">
-                              <input
-                                value={subtaskDraft}
-                                onChange={(e) => setSubtaskDraft(e.target.value)}
-                                placeholder={t('addSubtaskPlaceholder', lang)}
-                                className={`flex-1 px-3 py-2 rounded-xl border text-[12px] focus:outline-none focus:ring-2 ${inputCls}`}
-                              />
-                              <button
-                                onClick={() => addSubtask(quest)}
-                                className={`px-3 py-2 rounded-xl text-[12px] font-semibold text-white ${btnGradient}`}
-                              >
-                                <Plus size={14} className="inline -mt-[2px]" />
-                              </button>
-                            </div>
-                          )}
-
-                          {(Array.isArray(quest.subtasks) ? quest.subtasks : []).length === 0 && (
-                            <div className={`text-[12px] ${ts}`}>—</div>
-                          )}
-                        </div>
-                      </div>
-
-                      {quest.status === 'active' && (
-                        <div className="pt-2 flex items-center justify-end">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const ok = window.confirm('Delete this task?');
-                              if (ok) onDelete(quest.id);
-                            }}
-                            className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-[12px] font-semibold inline-flex items-center justify-center gap-2 transition-all ${isDark ? 'bg-red-500/10 text-red-300 hover:bg-red-500/15' : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200/40'
-                              }`}
-                          >
-                            <Trash2 size={14} />
-                            Delete Quest
-                          </button>
+                          </SwipeReveal>
                         </div>
                       )}
-                    </div>
-                  )}
-                </div>
-              </SwipeReveal>
-            );
-          })}
-
-          {filteredQuests.length === 0 && (
-            <div className="text-center py-14">
-              <span className="text-5xl opacity-60">{isHinglish ? '😴' : '🏰'}</span>
-              <p className={`font-medium mt-3 ${tp}`}>{t('noQuests', lang)}</p>
-              <p className={`text-[13px] mt-1 ${ts}`}>{t('noQuestsSub', lang)}</p>
-            </div>
-          )}
-        </div>
+                    </Draggable>
+                  );
+                })}
+                {filteredQuests.length === 0 && (
+                  <div className="text-center py-14">
+                    <span className="text-5xl opacity-60">{isHinglish ? '😴' : '🏰'}</span>
+                    <p className={`font-medium mt-3 ${tp}`}>{t('noQuests', lang)}</p>
+                    <p className={`text-[11px] mt-1 ${ts}`}>{t('noQuestsSub', lang)}</p>
+                  </div>
+                )}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       )}
     </div>
   );

@@ -16,18 +16,22 @@ import {
   FileText,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTheme } from '../context/ThemeContext';
 import { t } from '../i18n';
 import { useSupabaseAttachments } from '../hooks/useSupabaseAttachments';
-import type { Note, NoteRevision } from '../store';
+import type { Note, NoteRevision, Quest } from '../store';
 import { noteColors } from '../store';
 import { formatRelativeTime } from '../notifications';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface NotesVaultProps {
   notes: Note[];
+  quests: Quest[];
   onAdd: (note: Omit<Note, 'id' | 'createdAt'>) => void;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, patch: Partial<Pick<Note, 'title' | 'content' | 'tags' | 'color' | 'emoji'>>) => void;
+  onUpdate: (id: string, patch: Partial<Pick<Note, 'title' | 'content' | 'tags' | 'color' | 'emoji' | 'folder' | 'linkedQuestId'>>) => void;
 
   /** Optional global search query from TopNav. */
   externalSearchQuery?: string;
@@ -65,111 +69,41 @@ function noteToMarkdown(n: Note) {
 
 function noteToText(n: Note) {
   const tags = n.tags?.length ? `\n\nTags: ${n.tags.join(', ')}` : '';
+  const folder = n.folder ? `\nFolder: ${n.folder}` : '';
   const meta = `\n\nCreated: ${n.createdAt}${n.updatedAt ? `\nUpdated: ${n.updatedAt}` : ''}`;
-  return `${n.title}\n\n${n.content || ''}${tags}${meta}\n`;
+  return `${n.title}\n\n${n.content || ''}${tags}${folder}${meta}\n`;
 }
 
-/**
- * Minimal markdown renderer:
- * - Headings: #, ##, ###
- * - Code blocks: ``` ... ```
- * - Inline: **bold**, *italic*, `code`
- *
- * No HTML is executed; everything is rendered as React nodes.
- */
-function renderInlineMarkdown(text: string) {
-  const nodes: ReactNode[] = [];
-  let i = 0;
-  let key = 0;
+/** Full-text search snippet generation */
+function generateSearchSnippet(content: string, query: string, maxLength: number = 100): string | null {
+  if (!query) return null;
+  const lowerContent = content.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const index = lowerContent.indexOf(lowerQuery);
+  if (index === -1) return null;
 
-  const pushText = (s: string) => {
-    if (!s) return;
-    nodes.push(s);
-  };
+  const half = Math.floor(maxLength / 2);
+  let start = Math.max(0, index - half);
+  let end = Math.min(content.length, index + query.length + half);
 
-  while (i < text.length) {
-    // Find next token among **, *, `
-    const nextBold = text.indexOf('**', i);
-    const nextCode = text.indexOf('`', i);
-    const nextItalic = text.indexOf('*', i);
-
-    const candidates = [nextBold, nextCode, nextItalic].filter((x) => x >= 0);
-    if (candidates.length === 0) {
-      pushText(text.slice(i));
-      break;
-    }
-
-    const next = Math.min(...candidates);
-    pushText(text.slice(i, next));
-
-    // Prefer bold when ** starts at next
-    if (nextBold === next) {
-      const end = text.indexOf('**', next + 2);
-      if (end >= 0) {
-        const inner = text.slice(next + 2, end);
-        nodes.push(
-          <strong key={`b-${key++}`} className="font-semibold">
-            {inner}
-          </strong>
-        );
-        i = end + 2;
-        continue;
-      }
-      // No closing, treat as text
-      pushText('**');
-      i = next + 2;
-      continue;
-    }
-
-    // Inline code
-    if (nextCode === next) {
-      const end = text.indexOf('`', next + 1);
-      if (end >= 0) {
-        const inner = text.slice(next + 1, end);
-        nodes.push(
-          <code
-            key={`c-${key++}`}
-            className="px-1.5 py-0.5 rounded-md text-[12px] font-mono bg-black/5 dark:bg-white/10"
-          >
-            {inner}
-          </code>
-        );
-        i = end + 1;
-        continue;
-      }
-      pushText('`');
-      i = next + 1;
-      continue;
-    }
-
-    // Italic (single *)
-    if (nextItalic === next) {
-      // Avoid treating ** as italic (already handled above)
-      if (text.slice(next, next + 2) === '**') {
-        pushText('*');
-        i = next + 1;
-        continue;
-      }
-      const end = text.indexOf('*', next + 1);
-      if (end >= 0) {
-        const inner = text.slice(next + 1, end);
-        nodes.push(
-          <em key={`i-${key++}`} className="italic">
-            {inner}
-          </em>
-        );
-        i = end + 1;
-        continue;
-      }
-      pushText('*');
-      i = next + 1;
-      continue;
-    }
+  // Try to snap to whole words
+  if (start > 0) {
+    const spaceIndex = content.indexOf(' ', start);
+    if (spaceIndex !== -1 && spaceIndex < index) start = spaceIndex;
+  }
+  if (end < content.length) {
+    const spaceIndex = content.lastIndexOf(' ', end);
+    if (spaceIndex !== -1 && spaceIndex > index + query.length) end = spaceIndex;
   }
 
-  return nodes;
+  let snippet = content.slice(start, end).trim();
+  if (start > 0) snippet = '...' + snippet;
+  if (end < content.length) snippet = snippet + '...';
+
+  return snippet;
 }
 
+/** Markdown component overrides for Tailwind styling */
 function MarkdownView({
   content,
   isDark,
@@ -179,90 +113,62 @@ function MarkdownView({
   isDark: boolean;
   isModern: boolean;
 }) {
-  // Split by fenced code blocks.
-  const parts = content.split('```');
-  const out: ReactNode[] = [];
+  const codeBg = isModern
+    ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-primary)]'
+    : isDark
+      ? 'bg-white/[0.03] border border-white/[0.06] text-slate-200'
+      : 'bg-slate-50 border border-slate-200 text-slate-800';
 
-  for (let p = 0; p < parts.length; p++) {
-    const seg = parts[p];
-    const isCode = p % 2 === 1;
+  const inlineCodeBg = isModern
+    ? 'bg-[var(--kq-bg2)] text-[var(--kq-text-primary)]'
+    : isDark
+      ? 'bg-white/10 text-slate-200'
+      : 'bg-black/5 text-slate-800';
 
-    if (isCode) {
-      // First line can be a language tag; keep it but do not highlight.
-      const lines = seg.replace(/^\n+/, '').replace(/\n+$/, '').split('\n');
-      const first = lines[0] ?? '';
-      const looksLikeLang = /^[a-zA-Z0-9#+_.-]{1,20}$/.test(first.trim());
-      const code = (looksLikeLang ? lines.slice(1) : lines).join('\n');
-
-      out.push(
-        <pre
-          key={`code-${p}`}
-          className={`rounded-xl p-3 my-3 overflow-auto text-[12px] leading-relaxed font-mono border ${isModern
-            ? 'bg-[var(--kq-bg2)] border-[var(--kq-border)] text-[var(--kq-text-primary)]'
-            : isDark
-              ? 'bg-white/[0.03] border-white/[0.06] text-slate-200'
-              : 'bg-slate-50 border-slate-200 text-slate-800'
-            }`}
-        >
-          <code>{code}</code>
-        </pre>
-      );
-      continue;
-    }
-
-    // Normal markdown lines
-    const lines = seg.split('\n');
-    for (let li = 0; li < lines.length; li++) {
-      const line = lines[li];
-
-      // Empty line -> spacing
-      if (line.trim().length === 0) {
-        out.push(<div key={`sp-${p}-${li}`} className="h-2" />);
-        continue;
-      }
-
-      const h1 = line.match(/^#\s+(.*)$/);
-      const h2 = line.match(/^##\s+(.*)$/);
-      const h3 = line.match(/^###\s+(.*)$/);
-
-      if (h1) {
-        out.push(
-          <h3 key={`h1-${p}-${li}`} className="text-[16px] font-extrabold mt-2">
-            {renderInlineMarkdown(h1[1])}
-          </h3>
-        );
-        continue;
-      }
-      if (h2) {
-        out.push(
-          <h4 key={`h2-${p}-${li}`} className="text-[14px] font-bold mt-2">
-            {renderInlineMarkdown(h2[1])}
-          </h4>
-        );
-        continue;
-      }
-      if (h3) {
-        out.push(
-          <h5 key={`h3-${p}-${li}`} className="text-[13px] font-semibold mt-2">
-            {renderInlineMarkdown(h3[1])}
-          </h5>
-        );
-        continue;
-      }
-
-      out.push(
-        <p key={`p-${p}-${li}`} className="text-[13px] leading-relaxed">
-          {renderInlineMarkdown(line)}
-        </p>
-      );
-    }
-  }
-
-  return <div className="space-y-0.5">{out}</div>;
+  // Make sure headings, paragraphs, lists, and code blocks map seamlessly to KarmQuest's tailwind styling.
+  return (
+    <div className="space-y-3">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ node, className, ...props }) => <h3 className="text-[18px] font-extrabold mt-4 mb-2" {...props} />,
+          h2: ({ node, className, ...props }) => <h4 className="text-[16px] font-bold mt-4 mb-2" {...props} />,
+          h3: ({ node, className, ...props }) => <h5 className="text-[14px] font-semibold mt-3 mb-1" {...props} />,
+          p: ({ node, className, ...props }) => <p className="text-[13px] leading-relaxed" {...props} />,
+          ul: ({ node, className, ...props }) => <ul className="list-disc pl-5 space-y-1 text-[13px] leading-relaxed" {...props} />,
+          ol: ({ node, className, ...props }) => <ol className="list-decimal pl-5 space-y-1 text-[13px] leading-relaxed" {...props} />,
+          li: ({ node, className, ...props }) => <li {...props} />,
+          blockquote: ({ node, className, ...props }) => (
+            <blockquote className="border-l-4 border-indigo-400 pl-3 italic opacity-80" {...props} />
+          ),
+          a: ({ node, className, ...props }) => (
+            <a className="text-indigo-400 hover:text-indigo-500 underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />
+          ),
+          code: ({ node, inline, className, children, ...props }: any) => {
+            const match = /language-(\w+)/.exec(className || '');
+            return !inline ? (
+              <div className={`rounded-xl p-3 my-3 overflow-auto text-[12px] leading-relaxed font-mono ${codeBg}`}>
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              </div>
+            ) : (
+              <code className={`px-1.5 py-0.5 rounded-md text-[12px] font-mono ${inlineCodeBg}`} {...props}>
+                {children}
+              </code>
+            )
+          }
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 export function NotesVault({
   notes,
+  quests,
   onAdd,
   onDelete,
   onUpdate,
@@ -275,6 +181,7 @@ export function NotesVault({
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [previewNote, setPreviewNote] = useState<Note | null>(null);
 
   const [sortMode, setSortMode] = useState<SortMode>('newest');
@@ -292,6 +199,8 @@ export function NotesVault({
   const [editTags, setEditTags] = useState('');
   const [editColor, setEditColor] = useState(noteColors[0]);
   const [editEmoji, setEditEmoji] = useState('📜');
+  const [editFolder, setEditFolder] = useState('');
+  const [editLinkedQuestId, setEditLinkedQuestId] = useState<string>('');
 
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
@@ -307,6 +216,8 @@ export function NotesVault({
   const [newTags, setNewTags] = useState('');
   const [newColor, setNewColor] = useState(noteColors[0]);
   const [newEmoji, setNewEmoji] = useState('📜');
+  const [newFolder, setNewFolder] = useState('');
+  const [newLinkedQuestId, setNewLinkedQuestId] = useState<string>('');
 
   const [sizePopup, setSizePopup] = useState<{ title: string; message: string } | null>(null);
   const MAX_ATTACHMENT_BYTES = 1 * 1024 * 1024; // 1MB
@@ -329,6 +240,7 @@ export function NotesVault({
       : 'bg-slate-50/80 border-slate-200/50 text-slate-800 placeholder:text-slate-400 focus:ring-indigo-300/30';
 
   const allTags = Array.from(new Set(notes.flatMap((n) => n.tags)));
+  const allFolders = Array.from(new Set(notes.map((n) => n.folder).filter(Boolean))) as string[];
 
   const prettyRelative = (v: string) => {
     const ms = Date.parse(v);
@@ -370,7 +282,8 @@ export function NotesVault({
         n.content.toLowerCase().includes(q) ||
         n.tags.some((tag) => tag.toLowerCase().includes(q));
       const matchTag = !selectedTag || n.tags.includes(selectedTag);
-      return matchSearch && matchTag;
+      const matchFolder = !selectedFolder || n.folder === selectedFolder;
+      return matchSearch && matchTag && matchFolder;
     });
 
     const byNewest = (a: Note, b: Note) => safeParseISO(b.createdAt) - safeParseISO(a.createdAt);
@@ -404,17 +317,29 @@ export function NotesVault({
         break;
     }
     return sorted;
-  }, [notes, searchQuery, selectedTag, sortMode]);
+  }, [notes, searchQuery, selectedTag, selectedFolder, sortMode]);
 
-  // Focus/highlight from global search.
+  // Focus/highlight from global search or new-linked-note signal
   useEffect(() => {
     if (!focusNoteId) return;
+
+    if (focusNoteId.startsWith('new-link-')) {
+      const qid = focusNoteId.replace('new-link-', '');
+      const q = quests.find(x => x.id === qid);
+      setNewTitle(q ? `${q.title} - Notes` : 'New Linked Note');
+      setNewLinkedQuestId(qid);
+      setNewFolder(q?.category || '');
+      setShowForm(true);
+      setTimeout(() => onFocusHandled?.(), 450);
+      return;
+    }
+
     const note = notes.find((n) => n.id === focusNoteId);
     const el = document.getElementById(`note-${focusNoteId}`);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     if (note) setPreviewNote(note);
     setTimeout(() => onFocusHandled?.(), 450);
-  }, [focusNoteId, notes, onFocusHandled]);
+  }, [focusNoteId, notes, onFocusHandled, quests]);
 
   // Keep previewNote in sync when notes update.
   useEffect(() => {
@@ -433,6 +358,8 @@ export function NotesVault({
     setEditTags(previewNote.tags.join(', '));
     setEditColor(previewNote.color);
     setEditEmoji(previewNote.emoji);
+    setEditFolder(previewNote.folder || '');
+    setEditLinkedQuestId(previewNote.linkedQuestId || '');
     setShowExportMenu(false);
     setRevPage(1);
     setRestoreFrom(null);
@@ -449,10 +376,14 @@ export function NotesVault({
         .filter(Boolean),
       color: newColor,
       emoji: newEmoji,
+      folder: newFolder.trim() || undefined,
+      linkedQuestId: newLinkedQuestId || undefined,
     });
     setNewTitle('');
     setNewContent('');
     setNewTags('');
+    setNewFolder('');
+    setNewLinkedQuestId('');
     setShowForm(false);
   };
 
@@ -467,6 +398,8 @@ export function NotesVault({
     setEditTags(previewNote.tags.join(', '));
     setEditColor(previewNote.color);
     setEditEmoji(previewNote.emoji);
+    setEditFolder(previewNote.folder || '');
+    setEditLinkedQuestId(previewNote.linkedQuestId || '');
   };
 
   const cancelEdit = () => {
@@ -477,6 +410,8 @@ export function NotesVault({
     setEditTags(previewNote.tags.join(', '));
     setEditColor(previewNote.color);
     setEditEmoji(previewNote.emoji);
+    setEditFolder(previewNote.folder || '');
+    setEditLinkedQuestId(previewNote.linkedQuestId || '');
     setRestoreFrom(null);
   };
 
@@ -495,7 +430,9 @@ export function NotesVault({
       editContent !== previewNote.content ||
       tags.join('|') !== previewNote.tags.join('|') ||
       editColor !== previewNote.color ||
-      editEmoji !== previewNote.emoji;
+      editEmoji !== previewNote.emoji ||
+      (editFolder.trim() || undefined) !== previewNote.folder ||
+      (editLinkedQuestId || undefined) !== previewNote.linkedQuestId;
 
     if (!dirty) {
       setEditMode(false);
@@ -509,6 +446,8 @@ export function NotesVault({
       tags,
       color: editColor,
       emoji: editEmoji,
+      folder: editFolder.trim() || undefined,
+      linkedQuestId: editLinkedQuestId || undefined,
     });
 
     setEditMode(false);
@@ -523,6 +462,8 @@ export function NotesVault({
       previewNote.content === rev.content &&
       previewNote.color === rev.color &&
       previewNote.emoji === rev.emoji &&
+      previewNote.folder === rev.folder &&
+      previewNote.linkedQuestId === rev.linkedQuestId &&
       previewNote.tags.join('|') === (rev.tags || []).join('|');
 
     if (same) {
@@ -544,6 +485,8 @@ export function NotesVault({
     setEditTags((rev.tags || []).join(', '));
     setEditColor(rev.color);
     setEditEmoji(rev.emoji);
+    setEditFolder(rev.folder || '');
+    setEditLinkedQuestId(rev.linkedQuestId || '');
 
     setRestoreFrom(rev.editedAt);
   };
@@ -697,7 +640,8 @@ export function NotesVault({
 
   return (
     <div className="space-y-5 animate-slide-up">
-      {sizePopup && (
+      {/* Size Popup */}
+      {sizePopup && createPortal(
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
           onClick={() => setSizePopup(null)}
@@ -736,7 +680,8 @@ export function NotesVault({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Header */}
@@ -784,6 +729,21 @@ export function NotesVault({
               <option value="tag">{sortLabel('tag')}</option>
             </select>
           </div>
+
+          {allFolders.length > 0 && (
+            <div className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${isModern ? 'border-[var(--kq-border)]' : isDark ? 'border-white/[0.06]' : 'border-slate-200/50'}`}>
+              <FileText size={14} className={isDark ? 'text-slate-400' : 'text-slate-500'} />
+              <select
+                value={selectedFolder || ''}
+                onChange={(e) => setSelectedFolder(e.target.value || null)}
+                className={`bg-transparent text-[13px] outline-none ${tp}`}
+                aria-label="Filter by folder"
+              >
+                <option value="">All Folders</option>
+                {allFolders.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-1.5 flex-wrap items-center">
@@ -907,6 +867,25 @@ export function NotesVault({
               placeholder={t('scrollTags', lang)}
               className={`w-full px-3.5 py-2 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
             />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={newFolder}
+                onChange={(e) => setNewFolder(e.target.value)}
+                placeholder="Folder (e.g. Work, Ideas)"
+                className={`w-full px-3.5 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
+              />
+              <select
+                value={newLinkedQuestId}
+                onChange={(e) => setNewLinkedQuestId(e.target.value)}
+                className={`w-full px-3.5 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
+              >
+                <option value="">No Linked Quest</option>
+                {quests.map(q => (
+                  <option key={q.id} value={q.id}>{q.title}</option>
+                ))}
+              </select>
+            </div>
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setShowForm(false)}
@@ -952,7 +931,28 @@ export function NotesVault({
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className={`font-semibold text-[13px] truncate ${tp}`}>{note.title}</h4>
-                  <p className={`text-[12px] mt-0.5 line-clamp-3 leading-relaxed ${ts}`}>{note.content}</p>
+
+                  {note.folder && (
+                    <div className="flex items-center gap-1 mt-0.5 text-[10px] text-indigo-500 font-medium">
+                      <FileText size={10} /> {note.folder}
+                    </div>
+                  )}
+
+                  {note.linkedQuestId && (() => {
+                    const linkedQ = quests.find(q => q.id === note.linkedQuestId);
+                    if (!linkedQ) return null;
+                    return (
+                      <div className="flex items-center gap-1 mt-0.5 text-[10px] font-medium opacity-80" style={{ color: note.color }}>
+                        <ExternalLink size={10} /> {linkedQ.title}
+                      </div>
+                    );
+                  })()}
+
+                  <p className={`text-[12px] mt-1.5 line-clamp-3 leading-relaxed ${ts}`}>
+                    {searchQuery.trim().length > 0
+                      ? (generateSearchSnippet(note.content, searchQuery) || note.content)
+                      : note.content}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center justify-between mt-3">
@@ -983,13 +983,13 @@ export function NotesVault({
       )}
 
       {/* Preview Modal */}
-      {previewNote && (
+      {previewNote && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm overflow-y-auto"
           onClick={() => setPreviewNote(null)}
         >
           <div
-            className={`rounded-2xl shadow-2xl max-w-lg w-full p-7 animate-slide-up relative ${isDark ? 'bg-[#16162A] border border-white/[0.06]' : 'bg-white'
+            className={`rounded-2xl shadow-2xl max-w-lg w-full p-6 sm:p-7 relative my-auto ${isDark ? 'bg-[#16162A] border border-white/[0.06]' : 'bg-white'
               }`}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1061,6 +1061,23 @@ export function NotesVault({
               </div>
               <div className="min-w-0">
                 <h3 className={`text-lg font-bold ${tp} truncate`}>{previewNote.title}</h3>
+
+                {previewNote.folder && !editMode && (
+                  <div className="flex items-center gap-1 mt-0.5 text-[11px] text-indigo-500 font-medium mb-1">
+                    <FileText size={12} /> {previewNote.folder}
+                  </div>
+                )}
+
+                {previewNote.linkedQuestId && !editMode && (() => {
+                  const linkedQ = quests.find(q => q.id === previewNote.linkedQuestId);
+                  if (!linkedQ) return null;
+                  return (
+                    <div className="flex items-center gap-1 mt-0.5 text-[11px] font-medium opacity-80 mb-1" style={{ color: previewNote.color }}>
+                      <ExternalLink size={12} /> Linked to: {linkedQ.title}
+                    </div>
+                  );
+                })()}
+
                 <p className={`text-[11px] ${ts}`}>{noteMetaLine(previewNote)}</p>
               </div>
             </div>
@@ -1147,6 +1164,26 @@ export function NotesVault({
                   placeholder={t('scrollTags', lang)}
                   className={`w-full px-3.5 py-2 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
                 />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={editFolder}
+                    onChange={(e) => setEditFolder(e.target.value)}
+                    placeholder="Folder (e.g. Work, Ideas)"
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
+                  />
+                  <select
+                    value={editLinkedQuestId}
+                    onChange={(e) => setEditLinkedQuestId(e.target.value)}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${inputCls}`}
+                  >
+                    <option value="">No Linked Quest</option>
+                    {quests.map(q => (
+                      <option key={q.id} value={q.id}>{q.title}</option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="flex justify-end gap-2">
                   <button
@@ -1398,7 +1435,8 @@ export function NotesVault({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
