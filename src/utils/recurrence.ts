@@ -2,7 +2,7 @@
 // We intentionally do NOT import date helpers from store.ts to avoid circular imports
 // (store.ts also needs weekStart/End helpers for due-date parsing).
 
-function addDaysISO(baseISO: string, days: number): string {
+export function addDaysISO(baseISO: string, days: number): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(baseISO)) return '';
   const [y, m, d] = baseISO.split('-').map(Number);
   const dt = new Date(y, m - 1, d);

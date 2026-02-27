@@ -71,6 +71,8 @@ export interface Quest {
   subtasks: SubTask[];
   /** Optional special title badge (from Mudra Shop). */
   badge: string; // TitleBadgeId, kept as string for backward-compat
+  /** Optional manual sorting order. */
+  order?: number;
 }
 
 export interface NoteRevision {
@@ -81,6 +83,10 @@ export interface NoteRevision {
   tags: string[];
   color: string;
   emoji: string;
+  /** Optional folder categorization. */
+  folder?: string;
+  /** Optional ID of a quest this note is linked to. */
+  linkedQuestId?: string;
 }
 
 export interface Note {
@@ -96,6 +102,10 @@ export interface Note {
   /** Previous versions (newest first). */
   revisions?: NoteRevision[];
   emoji: string;
+  /** Optional folder categorization. */
+  folder?: string;
+  /** Optional ID of a quest this note is linked to. */
+  linkedQuestId?: string;
 }
 
 export type AchievementCriteria = {
@@ -154,6 +164,60 @@ export interface UserStats {
   avatarImagePath?: string | null;
   username: string;
 }
+
+export interface CustomChallenge {
+  id: string;
+  title: string;
+  description: string;
+  targetCount: number; // e.g., complete X quests or earn X XP
+  rewardCoins: number;
+  creator: string; // 'community' or username
+  isCommunity: boolean;
+  requiresChallengeId?: string; // For chains (A -> B unlock)
+  status: 'available' | 'active' | 'completed';
+  progress: number;
+  type: 'quests' | 'xp'; // What are we tracking?
+}
+
+export const defaultCommunityChallenges: CustomChallenge[] = [
+  {
+    id: 'cc-1',
+    title: 'The Path of Karma I',
+    description: 'Complete 5 karma quests to show your dedication.',
+    targetCount: 5,
+    rewardCoins: 100,
+    creator: 'Community',
+    isCommunity: true,
+    status: 'available',
+    progress: 0,
+    type: 'quests'
+  },
+  {
+    id: 'cc-2',
+    title: 'The Path of Karma II',
+    description: 'Master your routine by completing 15 more quests.',
+    targetCount: 15,
+    rewardCoins: 300,
+    creator: 'Community',
+    isCommunity: true,
+    requiresChallengeId: 'cc-1',
+    status: 'available',
+    progress: 0,
+    type: 'quests'
+  },
+  {
+    id: 'cc-3',
+    title: 'XP Grind Champion',
+    description: 'Earn 1000 XP through any activity.',
+    targetCount: 1000,
+    rewardCoins: 500,
+    creator: 'Community',
+    isCommunity: true,
+    status: 'available',
+    progress: 0,
+    type: 'xp'
+  }
+];
 
 // Optional event type used by analytics (safe even if you don't persist it yet).
 export type FocusLogEvent = {

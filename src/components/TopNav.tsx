@@ -46,23 +46,28 @@ interface TopNavProps {
 }
 
 const themeOptions: { mode: ThemeMode; icon: string; labelKey: 'themeLight' | 'themeModern' | 'themeDark' | 'themeHinglish'; desc: string; color: string }[] = [
-  { mode: 'light',    icon: '☀️', labelKey: 'themeLight',    desc: 'Clean & minimal',                color: 'from-amber-200 to-orange-300' },
-  { mode: 'modern',   icon: '🗒️', labelKey: 'themeModern',   desc: 'Editorial • professional',       color: 'from-teal-700 to-slate-700' },
-  // Theme 3 (mode: "dark") is Chakra Rings — a LIGHT palette with blue/violet accents.
-  { mode: 'dark',     icon: '🟣', labelKey: 'themeDark',     desc: 'Soft indigo • light',             color: 'from-indigo-500 to-violet-500' },
-  // Theme 4 (mode: "hinglish") is Indigo Dark — a DARK palette (blue/black).
-  { mode: 'hinglish', icon: '🌙', labelKey: 'themeHinglish', desc: 'Indigo dark • night mode',        color: 'from-slate-900 to-indigo-950' },
+  { mode: 'light', icon: '☀️', labelKey: 'themeLight', desc: 'Clean & minimal', color: 'from-amber-200 to-orange-300' },
+  { mode: 'modern', icon: '🗒️', labelKey: 'themeModern', desc: 'Editorial • professional', color: 'from-teal-700 to-slate-700' },
+  { mode: 'dark', icon: '🟣', labelKey: 'themeDark', desc: 'Soft indigo • light', color: 'from-indigo-500 to-violet-500' },
+  { mode: 'hinglish', icon: '🌙', labelKey: 'themeHinglish', desc: 'Indigo dark • night mode', color: 'from-slate-900 to-indigo-950' },
+];
+
+const THEME_SLOTS = [
+  { mode: 'light', icon: Sun, color: 'text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]' },
+  { mode: 'modern', icon: FileText, color: 'text-teal-600 drop-shadow-[0_0_8px_rgba(13,148,136,0.3)]' },
+  { mode: 'dark', icon: Palette, color: 'text-indigo-400 drop-shadow-[0_0_8px_rgba(129,140,248,0.5)]' },
+  { mode: 'hinglish', icon: Moon, color: 'text-violet-300 drop-shadow-[0_0_8px_rgba(196,181,253,0.5)]' },
 ];
 
 const typeAccent: Record<NotificationType, { dot: string; unreadBg: string; unreadBgDark: string }> = {
-  quest_complete:  { dot: 'bg-emerald-500', unreadBg: 'bg-emerald-50',  unreadBgDark: 'bg-emerald-500/10' },
-  achievement:     { dot: 'bg-amber-500',   unreadBg: 'bg-amber-50',    unreadBgDark: 'bg-amber-500/10'   },
-  streak:          { dot: 'bg-orange-500',  unreadBg: 'bg-orange-50',   unreadBgDark: 'bg-orange-500/10'  },
+  quest_complete: { dot: 'bg-emerald-500', unreadBg: 'bg-emerald-50', unreadBgDark: 'bg-emerald-500/10' },
+  achievement: { dot: 'bg-amber-500', unreadBg: 'bg-amber-50', unreadBgDark: 'bg-amber-500/10' },
+  streak: { dot: 'bg-orange-500', unreadBg: 'bg-orange-50', unreadBgDark: 'bg-orange-500/10' },
   // Use theme primary so Theme 1 (saffron) doesn't show indigo.
-  daily_challenge: { dot: 'bg-[var(--kq-primary)]',  unreadBg: 'bg-[var(--kq-primary-soft)]',   unreadBgDark: 'bg-[var(--kq-primary-soft)]'  },
-  level_up:        { dot: 'bg-violet-500',  unreadBg: 'bg-violet-50',   unreadBgDark: 'bg-violet-500/10'  },
-  focus:          { dot: 'bg-cyan-500',    unreadBg: 'bg-cyan-50',     unreadBgDark: 'bg-cyan-500/10'    },
-  reminder:       { dot: 'bg-pink-500',    unreadBg: 'bg-pink-50',     unreadBgDark: 'bg-pink-500/10'    },
+  daily_challenge: { dot: 'bg-[var(--kq-primary)]', unreadBg: 'bg-[var(--kq-primary-soft)]', unreadBgDark: 'bg-[var(--kq-primary-soft)]' },
+  level_up: { dot: 'bg-violet-500', unreadBg: 'bg-violet-50', unreadBgDark: 'bg-violet-500/10' },
+  focus: { dot: 'bg-cyan-500', unreadBg: 'bg-cyan-50', unreadBgDark: 'bg-cyan-500/10' },
+  reminder: { dot: 'bg-pink-500', unreadBg: 'bg-pink-50', unreadBgDark: 'bg-pink-500/10' },
 };
 
 function NotifRow({ n, isDark, onMarkRead }: {
@@ -71,23 +76,21 @@ function NotifRow({ n, isDark, onMarkRead }: {
   const cfg = typeAccent[n.type];
   return (
     <div onClick={() => onMarkRead(n.id)}
-      className={`flex gap-3 px-4 py-3.5 cursor-pointer transition-all group border-b last:border-b-0 ${
-        isDark ? 'border-white/[0.04]' : 'border-slate-100/80'
-      } ${!n.read
+      className={`flex gap-3 px-4 py-3.5 cursor-pointer transition-all group border-b last:border-b-0 ${isDark ? 'border-white/[0.04]' : 'border-slate-100/80'
+        } ${!n.read
           ? isDark ? cfg.unreadBgDark : cfg.unreadBg
           : isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50/70'
-      }`}>
+        }`}>
       {/* Icon bubble */}
       <div className={`shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center text-lg ${isDark ? 'bg-white/[0.07]' : 'bg-white'} shadow-sm`}>
         {n.icon}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className={`text-[12.5px] leading-snug ${
-            !n.read
-              ? isDark ? 'font-bold text-white' : 'font-bold text-slate-900'
-              : isDark ? 'font-medium text-slate-300' : 'font-medium text-slate-700'
-          }`}>{n.title}</p>
+          <p className={`text-[12.5px] leading-snug ${!n.read
+            ? isDark ? 'font-bold text-white' : 'font-bold text-slate-900'
+            : isDark ? 'font-medium text-slate-300' : 'font-medium text-slate-700'
+            }`}>{n.title}</p>
           {!n.read && <div className={`shrink-0 w-2 h-2 rounded-full mt-1.5 ${cfg.dot}`} />}
         </div>
         <p className={`text-[11px] mt-0.5 leading-relaxed line-clamp-2 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{n.message}</p>
@@ -302,11 +305,10 @@ function SearchPanel({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className={`text-[12.5px] font-semibold truncate ${tp}`}>{r.title}</p>
-                  <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-full ${
-                    r.kind === 'quest'
-                      ? isDark ? 'bg-white/[0.05] text-[var(--kq-primary)]' : 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]'
-                      : isDark ? 'bg-white/[0.05] text-[var(--kq-violet)]' : 'bg-[rgba(124,58,237,0.10)] text-[var(--kq-violet)]'
-                  }`}>{r.kind === 'quest' ? 'Quest' : 'Note'}</span>
+                  <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-full ${r.kind === 'quest'
+                    ? isDark ? 'bg-white/[0.05] text-[var(--kq-primary)]' : 'bg-[var(--kq-primary-soft)] text-[var(--kq-primary)]'
+                    : isDark ? 'bg-white/[0.05] text-[var(--kq-violet)]' : 'bg-[rgba(124,58,237,0.10)] text-[var(--kq-violet)]'
+                    }`}>{r.kind === 'quest' ? 'Quest' : 'Note'}</span>
                 </div>
                 <p className={`text-[11px] mt-0.5 truncate ${ts}`}>{r.meta}</p>
               </div>
@@ -366,14 +368,23 @@ export function TopNav({
   }, [boostActive]);
   void tick;
   const boostLeft = boostRemainingMs(xpBoost);
-  const [showThemeMenu,    setShowThemeMenu]    = useState(false);
-  const [showNotifPanel,   setShowNotifPanel]   = useState(false);
+
+  const cycleTheme = useCallback(() => {
+    const fn = onThemeChange ?? setTheme;
+    const currentIndex = THEME_SLOTS.findIndex(t => t.mode === theme);
+    const nextIndex = (currentIndex + 1) % THEME_SLOTS.length;
+    const nextTheme = THEME_SLOTS[nextIndex].mode as ThemeMode;
+    Promise.resolve(fn(nextTheme));
+  }, [theme, onThemeChange, setTheme]);
+
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
-  const [showSearchPanel,  setShowSearchPanel]  = useState(false);
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
   const themeRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
-  const xpPercent   = Math.round((stats.xp / stats.xpToNext) * 100);
+  const xpPercent = Math.round((stats.xp / stats.xpToNext) * 100);
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const results = useMemo(() => buildSearchResults(searchQuery, quests, notes, isHinglish), [searchQuery, quests, notes, isHinglish]);
@@ -424,9 +435,9 @@ export function TopNav({
       ? 'bg-white/[0.04] border border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:ring-[var(--kq-primary)]/20 focus:border-white/[0.10]'
       : 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] text-[var(--kq-text-primary)] placeholder:text-[var(--kq-text-muted)] focus:ring-[var(--kq-primary)]/20 focus:border-[var(--kq-border2)]';
 
-  const tl  = isModern ? 'text-[var(--kq-text-secondary)]' : 'text-[var(--kq-text-secondary)]';
-  const acc = isModern ? 'text-[var(--kq-primary)]'        : 'text-[var(--kq-primary)]';
-  const ib  = isModern
+  const tl = isModern ? 'text-[var(--kq-text-secondary)]' : 'text-[var(--kq-text-secondary)]';
+  const acc = isModern ? 'text-[var(--kq-primary)]' : 'text-[var(--kq-primary)]';
+  const ib = isModern
     ? 'bg-[var(--kq-bg2)] border border-[var(--kq-border)] hover:bg-[var(--kq-bg3)]'
     : isDark
       ? 'bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06]'
@@ -477,7 +488,7 @@ export function TopNav({
         </div>
 
         {/* Search icon — xs only */}
-        <button onClick={() => { setShowMobileSearch(v => !v); setShowNotifPanel(false); setShowThemeMenu(false); }} aria-label="Search"
+        <button onClick={() => { setShowMobileSearch(v => !v); setShowNotifPanel(false); }} aria-label="Search"
           className={`flex sm:hidden items-center justify-center w-8 h-8 rounded-lg shrink-0 transition-all ${ib}`}>
           <Search size={15} className={acc} />
         </button>
@@ -498,11 +509,10 @@ export function TopNav({
 
           {/* XP boost pill */}
           {boostActive && (
-            <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border ${
-              isDark
-                ? 'bg-white/[0.03] border-white/[0.06]'
-                : 'bg-[var(--kq-primary-soft)] border-[var(--kq-border2)]'
-            }`} title="XP boost active">
+            <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border ${isDark
+              ? 'bg-white/[0.03] border-white/[0.06]'
+              : 'bg-[var(--kq-primary-soft)] border-[var(--kq-border2)]'
+              }`} title="XP boost active">
               <span className="text-sm">⚡</span>
               <span className={`text-[10px] font-black text-[var(--kq-primary)]`}>{xpBoost?.multiplier}×</span>
               <span className={`text-[10px] font-semibold text-[var(--kq-text-muted)]`}>{formatMs(boostLeft)}</span>
@@ -511,13 +521,12 @@ export function TopNav({
 
           {/* Focus pill */}
           {focusActive && (
-            <div className={`hidden md:flex items-center overflow-hidden rounded-lg border ${
-              isHinglish
-                ? 'bg-cyan-50/70 border-cyan-200/40'
-                : isDark
-                  ? 'bg-white/[0.03] border-white/[0.06]'
-                  : 'bg-cyan-50 border-cyan-200/40'
-            }`} title={focusQuestTitle ? `Focus: ${focusQuestTitle}` : 'Focus timer'}>
+            <div className={`hidden md:flex items-center overflow-hidden rounded-lg border ${isHinglish
+              ? 'bg-cyan-50/70 border-cyan-200/40'
+              : isDark
+                ? 'bg-white/[0.03] border-white/[0.06]'
+                : 'bg-cyan-50 border-cyan-200/40'
+              }`} title={focusQuestTitle ? `Focus: ${focusQuestTitle}` : 'Focus timer'}>
               <button
                 onClick={() => {
                   onNavigate('quests');
@@ -560,31 +569,53 @@ export function TopNav({
           </span>
         </div>
 
-        {/* Theme selector */}
-        <div className="relative shrink-0" ref={themeRef}>
-          <button onClick={() => { setShowThemeMenu(v => !v); setShowNotifPanel(false); }}
-            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border transition-all ${isDark ? 'bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]' : 'bg-[var(--kq-bg2)] border-[var(--kq-border)] hover:bg-[var(--kq-bg3)]'}`}>
-            {theme === 'light'    && <Sun     size={15} className="text-[var(--kq-primary)]" />}
-            {theme === 'modern'   && <FileText size={15} className="text-[var(--kq-primary)]" />}
-            {theme === 'dark'     && <Moon    size={15} className="text-[var(--kq-text-muted)]" />}
-            {theme === 'hinglish' && <Palette size={15} className="text-[var(--kq-primary)]" />}
-            <ChevronDown size={11} className={`transition-transform ${showThemeMenu ? 'rotate-180' : ''} ${isDark ? 'text-slate-500' : 'text-[var(--kq-text-muted)]'}`} />
-          </button>
+        {/* Split Animated Theme Switcher */}
+        <div className="relative shrink-0 flex items-center" ref={themeRef}>
+          <div className={`flex items-center rounded-lg border transition-all ${isDark ? 'bg-white/[0.03] border-white/[0.05]' : 'bg-[var(--kq-bg2)] border-[var(--kq-border)]'} shadow-sm`}>
+            {/* Label for new users */}
+            <span className={`hidden lg:block pl-2.5 pr-1.5 text-[11px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-[var(--kq-text-muted)]'}`}>
+              Theme
+            </span>
+
+            {/* Main Animated Button (Randomize/Cycle) */}
+            <button
+              onClick={() => { setShowNotifPanel(false); setShowThemeMenu(false); cycleTheme(); }}
+              className={`relative flex items-center justify-center w-[36px] h-[34px] m-[1px] rounded-md overflow-hidden transition-all duration-300 group ${isDark ? 'hover:bg-white/[0.08]' : 'hover:bg-white'}`}
+              title="Change Theme (Cycle)"
+            >
+              <div className="flex flex-col items-center transition-transform duration-[600ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+                style={{ transform: `translateY(-${Math.max(0, THEME_SLOTS.findIndex(t => t.mode === theme)) * 34}px)` }}>
+                {THEME_SLOTS.map((slot) => {
+                  const Icon = slot.icon;
+                  const isActive = theme === slot.mode;
+                  return (
+                    <div key={slot.mode} className="w-[36px] h-[34px] flex items-center justify-center shrink-0">
+                      <Icon size={16} className={`transition-all duration-500 ${isActive ? 'scale-100 group-hover:rotate-[15deg] opacity-100' : 'scale-50 opacity-0'} ${slot.color}`} />
+                    </div>
+                  );
+                })}
+              </div>
+            </button>
+
+            {/* Dropdown Chevron */}
+            <button
+              onClick={() => { setShowThemeMenu(v => !v); setShowNotifPanel(false); }}
+              className={`flex items-center justify-center w-[24px] h-[36px] border-l ${isDark ? 'border-white/[0.05] hover:bg-white/[0.05]' : 'border-[var(--kq-border)] hover:bg-black/5'} transition-colors rounded-r-lg`}
+              title="Select Specific Theme"
+            >
+              <ChevronDown size={11} className={`transition-transform ${showThemeMenu ? 'rotate-180' : ''} ${isDark ? 'text-slate-500' : 'text-[var(--kq-text-muted)]'}`} />
+            </button>
+          </div>
+
           {showThemeMenu && (
-            <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl p-1.5 shadow-xl border animate-slide-up z-50 ${
-              isModern
-                ? 'bg-[var(--kq-surface)] border-[var(--kq-border)]'
-                : isDark
-                  ? 'bg-[#1A1A2E] border-white/[0.06] backdrop-blur-xl'
-                  : 'bg-[var(--kq-surface)] border-[var(--kq-border)] backdrop-blur-xl'
-            }`}>
-              <p className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-[var(--kq-text-muted)]'}`}>Theme</p>
+            <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl p-1.5 shadow-xl border animate-slide-up z-50 ${isModern ? 'bg-[var(--kq-surface)] border-[var(--kq-border)]' : isDark ? 'bg-[#1A1A2E] border-white/[0.06] backdrop-blur-xl' : 'bg-[var(--kq-surface)] border-[var(--kq-border)] backdrop-blur-xl'}`}>
+              <p className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-[var(--kq-text-muted)]'}`}>Select Theme</p>
               {themeOptions.map(opt => (
                 <button key={opt.mode} onClick={() => {
-                    const fn = onThemeChange ?? setTheme;
-                    Promise.resolve(fn(opt.mode));
-                    setShowThemeMenu(false);
-                  }}
+                  const fn = onThemeChange ?? setTheme;
+                  Promise.resolve(fn(opt.mode));
+                  setShowThemeMenu(false);
+                }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all text-left ${theme === opt.mode ? (isDark ? 'bg-white/[0.06] ring-1 ring-white/[0.12]' : 'bg-[var(--kq-bg2)] ring-1 ring-[var(--kq-border2)]') : (isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-[var(--kq-bg2)]')}`}>
                   <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${opt.color} flex items-center justify-center text-sm shadow-sm`}>{opt.icon}</div>
                   <div className="flex-1">
@@ -600,7 +631,7 @@ export function TopNav({
 
         {/* Bell — notifications */}
         <div className="relative shrink-0" ref={notifRef}>
-          <button onClick={() => { setShowNotifPanel(v => !v); setShowThemeMenu(false); }}
+          <button onClick={() => setShowNotifPanel(v => !v)}
             aria-label={`${unreadCount} unread notifications`}
             className={`relative p-2 rounded-lg border transition-all ${ib} ${showNotifPanel ? (isDark ? 'bg-white/[0.08] border-white/[0.12]' : 'bg-[var(--kq-primary-soft)] border-[var(--kq-border2)]') : ''}`}>
             <Bell size={16} className={unreadCount > 0 ? 'text-[var(--kq-primary)]' : (isDark ? 'text-slate-400' : 'text-[var(--kq-text-muted)]')} />

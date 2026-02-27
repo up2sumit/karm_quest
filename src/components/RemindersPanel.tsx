@@ -69,7 +69,9 @@ export function RemindersPanel({ enabled, userId, quests, notes }: {
 
   const entityOptions = useMemo(() => {
     if (entityType === 'task') {
-      return quests.map((q) => ({ id: String(q.id), label: q.title }));
+      return quests
+        .filter(q => (q as any).status !== 'completed')
+        .map((q) => ({ id: String(q.id), label: q.title }));
     }
     return notes.map((n) => ({ id: String(n.id), label: n.title }));
   }, [entityType, notes, quests]);

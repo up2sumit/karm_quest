@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { Download } from 'lucide-react';
 import type { Quest } from '../store';
 import { useMoodLogUnified, type MoodEntry, type MoodValue } from '../hooks/useMoodLogUnified';
+import { shareCardAsImage } from '../utils/shareCardAsImage';
 
 type Props = {
   quests: Quest[];
@@ -580,13 +582,16 @@ function OrbitCanvas(props: {
   );
 }
 
-export function HabitHeatmap({ quests, days = 30 }: Props) {
+export function HabitHeatmap({ quests, days: initialDays = 30 }: Props) {
   const { isDark, isHinglish } = useTheme();
   const { user } = useAuth();
   const { entries } = useMoodLogUnified();
   const [selectedISO, setSelectedISO] = useState<string | null>(null);
   const [hoveredISO, setHoveredISO] = useState<string | null>(null);
   const [logVersion, setLogVersion] = useState(0);
+  const [days, setDays] = useState(initialDays);
+  const heatmapRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Completion log is stored in localStorage and updated by App.tsx.
   // Listen to an in-app event (same tab) + storage events (other tabs)
@@ -607,8 +612,7 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
   const [mode, setMode] = useState<HeatMode>(() => {
     try {
       const v = localStorage.getItem('kq_heatmap_mode_v1');
-      if (v === 'orbit' || v === 'constellation') return v;
-      if (v === 'grid' || v === 'chakra') return 'chakra';
+      if (v === 'orbit' || v === 'constellation' || v === 'chakra') return v;
     } catch {
       // ignore
     }
@@ -718,7 +722,7 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
   const { startISO, endISO, weeks, cells } = useMemo(() => {
     const today = localMidnight(new Date());
     const endISO = isoFromDate(today);
-    const effectiveDays = Math.min(30, Math.max(1, days));
+    const effectiveDays = Math.min(365, Math.max(1, days));
     const start = addDays(today, -(effectiveDays - 1));
     const startISO = isoFromDate(start);
 
@@ -846,7 +850,17 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
     return isDark ? 'bg-green-500/60' : 'bg-green-700/85';
   };
 
-  const title = isHinglish ? 'Habit Heatmap (30 din)' : 'Habit Heatmap (Last 30 days)';
+  const title = isHinglish ? `Habit Heatmap (${effectiveDays} din)` : `Habit Heatmap (Last ${effectiveDays} days)`;
+
+  const handleExport = async () => {
+    if (!heatmapRef.current || exporting) return;
+    setExporting(true);
+    try {
+      await shareCardAsImage(heatmapRef.current, 'karmquest-heatmap.png', 'KarmQuest Heatmap');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const pill = 'text-[11px] font-semibold px-3 py-1.5 rounded-xl border transition-all select-none';
   const pillOn = isDark
@@ -856,24 +870,94 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
     ? 'bg-white/[0.02] border-white/[0.08] text-slate-300 hover:bg-white/[0.04]'
     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50';
 
+  const moodCorrelation = useMemo(() => {
+    const byMood = new Map<number, { sum: number; count: number }>();
+    for (const d of daysData) {
+      if (!d.mood) continue;
+      const m = d.mood.mood;
+      const cur = byMood.get(m) || { sum: 0, count: 0 };
+      cur.sum += d.count;
+      cur.count += 1;
+      byMood.set(m, cur);
+    }
+    const res: Array<{ mood: number; avg: number }> = [];
+    for (const [m, stats] of byMood.entries()) {
+      if (stats.count > 0) {
+        res.push({ mood: m, avg: stats.sum / stats.count });
+      }
+    }
+    res.sort((a, b) => b.avg - a.avg);
+    return res;
+  }, [daysData]);
+
+  const moodInsight = useMemo(() => {
+    if (moodCorrelation.length < 2) return null;
+    const best = moodCorrelation[0];
+    const worst = moodCorrelation[moodCorrelation.length - 1];
+    if (best.avg > worst.avg * 1.5 && worst.avg > 0) {
+      return `You complete ${(best.avg / worst.avg).toFixed(1)}x more quests when feeling ${moodEmoji(best.mood as MoodValue)} compared to ${moodEmoji(worst.mood as MoodValue)}.`;
+    } else if (best.avg > worst.avg && worst.avg === 0) {
+      return `You are most productive (${best.avg.toFixed(1)} quests/day) when feeling ${moodEmoji(best.mood as MoodValue)}.`;
+    }
+    return null;
+  }, [moodCorrelation]);
+
   return (
     <div
-      className={`${card} rounded-2xl p-4 sm:p-5 [--hq-cell:10px] sm:[--hq-cell:12px] md:[--hq-cell:13px] [--hq-gap:5px]`}
+      ref={heatmapRef}
+      className={`${card} rounded-2xl p-4 sm:p-5 [--hq-cell:10px] sm:[--hq-cell:13px] md:[--hq-cell:13px] [--hq-gap:5px]`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h3 className={`text-sm font-semibold ${tp} flex items-center gap-2`}>
-            <span className="text-base">🗓️</span>
-            <span className="truncate">{title}</span>
-          </h3>
-          <div className={`mt-1 text-[10px] ${ts} flex items-center gap-2`}>
-            <span className="whitespace-nowrap">{startISO} → {endISO}</span>
-            <span className={isDark ? 'text-slate-500' : 'text-slate-400'}>•</span>
-            <span className="whitespace-nowrap">{effectiveDays} days</span>
+        <div className="min-w-0 flex items-center gap-3">
+          <div>
+            <h3 className={`text-sm font-semibold ${tp} flex items-center gap-2`}>
+              <span className="text-base">🗓️</span>
+              <span className="truncate">{title}</span>
+            </h3>
+            <div className={`mt-1 text-[10px] ${ts} flex items-center gap-2`}>
+              <span className="whitespace-nowrap">{startISO} → {endISO}</span>
+              <span className={isDark ? 'text-slate-500' : 'text-slate-400'}>•</span>
+              <span className="whitespace-nowrap">{effectiveDays} days</span>
+            </div>
           </div>
+
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className={`p-2 rounded-xl border transition-all ${isDark ? 'bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.08]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'} ${exporting ? 'opacity-50 cursor-wait' : ''}`}
+            title="Download / Share Image"
+          >
+            <Download size={15} className={tp} />
+          </button>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap justify-between sm:justify-end">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDays(30)}
+              className={`${pill} ${days === 30 ? pillOn : pillOff}`}
+              title="30 Days"
+            >
+              30D
+            </button>
+            <button
+              type="button"
+              onClick={() => setDays(90)}
+              className={`${pill} ${days === 90 ? pillOn : pillOff}`}
+              title="90 Days"
+            >
+              90D
+            </button>
+            <button
+              type="button"
+              onClick={() => setDays(365)}
+              className={`${pill} ${days === 365 ? pillOn : pillOff}`}
+              title="365 Days"
+            >
+              365D
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -1144,6 +1228,33 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
         </div>
       )}
 
+      {/* Mood Correlation Insights */}
+      {moodCorrelation.length > 0 && (
+        <div className={`mt-3 rounded-2xl p-3 sm:p-4 border ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-slate-50/60 border-slate-200/50'}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex-1">
+              <h4 className={`text-[12px] font-semibold ${tp} flex items-center gap-2 mb-1`}>
+                <span className="text-sm">💡</span> Mood Impact
+              </h4>
+              <p className={`text-[11px] ${ts}`}>
+                {moodInsight || 'Track more moods to see how they impact your quest completions.'}
+              </p>
+            </div>
+            {moodCorrelation.length > 1 && (
+              <div className="flex gap-4 overflow-x-auto pb-1 self-start sm:self-center">
+                {moodCorrelation.map((c) => (
+                  <div key={c.mood} className={`flex flex-col items-center justify-center p-2 rounded-xl border min-w-[64px] ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-white border-slate-200'}`}>
+                    <span className="text-xl mb-1">{moodEmoji(c.mood as MoodValue)}</span>
+                    <span className={`text-[10px] font-bold ${tp}`}>{c.avg.toFixed(1)}</span>
+                    <span className={`text-[9px] uppercase tracking-wider ${ts}`}>/day</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Selected day detail */}
       {selected ? (
         <div
@@ -1177,39 +1288,6 @@ export function HabitHeatmap({ quests, days = 30 }: Props) {
             >
               {isHinglish ? 'Band' : 'Close'}
             </button>
-          </div>
-
-          <div className="mt-3">
-            {selected.list.length === 0 ? (
-              <div className={`text-[11px] ${ts}`}>{isHinglish ? 'Koi completion nahi.' : 'No completions logged.'}</div>
-            ) : (
-              <div className="space-y-1.5">
-                {selected.list.slice(0, 10).map((q: any, idx: number) => {
-                  return (
-                    <div
-                      key={(q.questId || q.id || idx) + ':' + idx}
-                      className={`text-[12px] ${tp} flex items-start gap-2`}
-                    >
-                      <span className="text-[12px] mt-0.5">✅</span>
-                      <div className="min-w-0">
-                        <div className="truncate">{q.title}</div>
-                        <div className={`text-[10px] mt-0.5 ${ts} flex flex-wrap items-center gap-1.5`}>
-                          <span className={`px-2 py-0.5 rounded-lg border ${isDark ? 'border-white/[0.06]' : 'border-slate-200/60'}`}>
-                            {q.category || 'Karma'}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-lg border ${isDark ? 'border-white/[0.06]' : 'border-slate-200/60'}`}>
-                            {q.difficulty || 'easy'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {selected.list.length > 10 ? (
-                  <div className={`text-[10px] ${ts}`}>+{selected.list.length - 10} more…</div>
-                ) : null}
-              </div>
-            )}
           </div>
         </div>
       ) : null}
